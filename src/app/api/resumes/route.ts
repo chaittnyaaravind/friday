@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import mammoth from "mammoth";
 import { extractText } from "unpdf";
 import { HttpError, ok, withUser } from "@/lib/api";
-import { isAiConfigured } from "@/lib/ai/client";
+import { friendlyAiError, isAiConfigured } from "@/lib/ai/client";
 import { parseResume, type ParsedResume } from "@/lib/ai/tasks";
 import { rematchAll } from "@/lib/discovery/agent";
 import { extractSkills, resolveSkill } from "@/lib/domain/skills";
@@ -57,7 +57,7 @@ export const POST = withUser(async ({ db, user, req }) => {
     try {
       parsed = await parseResume(rawText);
     } catch (e) {
-      parseNote = `AI parsing failed (${e instanceof Error ? e.message : "error"}); skills were extracted directly from the text.`;
+      parseNote = `${friendlyAiError(e) ?? "AI parsing failed."} Skills were extracted directly from your resume text instead.`;
     }
   } else {
     parseNote = "AI parsing is not configured (ANTHROPIC_API_KEY). Skills were extracted directly from your resume text.";

@@ -32,7 +32,9 @@ export function Chat({ configured }: { configured: boolean }) {
   const [busy, setBusy] = useState(false);
   const [tool, setTool] = useState<string | null>(null);
   const end = useRef<HTMLDivElement>(null);
-  useEffect(() => end.current?.scrollIntoView({ behavior: "smooth", block: "end" }), [msgs, tool]);
+  useEffect(() => {
+    end.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [msgs, tool]);
 
   const send = async (text: string) => {
     if (!text.trim() || busy) return;

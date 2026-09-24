@@ -1,7 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { errorResponse } from "@/lib/api";
-import { claude, FALLBACK_BETA, MODEL } from "@/lib/ai/client";
+import { claude, FALLBACK_BETA, friendlyAiError, MODEL } from "@/lib/ai/client";
 import { tailorResume, ParsedResume } from "@/lib/ai/tasks";
 import { searchJobs } from "@/lib/data/jobs";
 import { authGuidance, ISSS_NOTICE } from "@/lib/domain/match";
@@ -183,7 +183,7 @@ export async function POST(req: Request) {
         }
         send({ type: "done" });
       } catch (e) {
-        send({ type: "error", error: e instanceof Error ? e.message : "Something went wrong" });
+        send({ type: "error", error: friendlyAiError(e) ?? (e instanceof Error ? e.message : "Something went wrong") });
       } finally {
         controller.close();
       }
