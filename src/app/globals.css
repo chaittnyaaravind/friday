@@ -1,26 +1,222 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+ * FRIDAY — "Espresso Precision"
+ * Oryzo's warm palette with Linear's app-grade restraint.
+ * Laws: muted = same hue at lower alpha · hairlines ≤1px tinted · accent < 5% of pixels ·
+ * display weight 450–510, tight tracking · fast hovers (120ms), slow reveals (700ms).
+ */
+
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #100904;
+  --surface-1: #1a120c;
+  --surface-2: #251912;
+  --surface-3: #2f2118;
+  --ink: 255 237 215; /* cream as RGB triplet so alpha steps share the hue */
+  --text: rgb(var(--ink));
+  --text-muted: rgb(var(--ink) / 0.6);
+  --text-dim: rgb(var(--ink) / 0.38);
+  --hairline: rgb(var(--ink) / 0.1);
+  --hairline-strong: rgb(var(--ink) / 0.18);
+  --highlight: rgb(var(--ink) / 0.06);
+  --accent: #dc5000;
+  --accent-hover: #f25a00;
+  --accent-ink: #fff4e8;
+  --accent-soft: rgb(220 80 0 / 0.14);
+  --moss: #8fa56b;
+  --moss-soft: rgb(143 165 107 / 0.14);
+  --amber: #e0a34a;
+  --amber-soft: rgb(224 163 74 / 0.13);
+  --glass: rgb(32 25 20 / 0.72);
+  --shadow: 0 1px 0 rgb(var(--ink) / 0.05) inset, 0 20px 40px -24px rgb(0 0 0 / 0.7);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f5f2ec;
+  --surface-1: #fbf9f5;
+  --surface-2: #ffffff;
+  --surface-3: #ebe6dd;
+  --ink: 38 26 18; /* espresso ink */
+  --text: rgb(var(--ink));
+  --text-muted: rgb(var(--ink) / 0.64);
+  --text-dim: rgb(var(--ink) / 0.44);
+  --hairline: rgb(var(--ink) / 0.1);
+  --hairline-strong: rgb(var(--ink) / 0.18);
+  --highlight: rgb(255 255 255 / 0.7);
+  --accent: #c2410c;
+  --accent-hover: #a8380a;
+  --accent-ink: #fff8f1;
+  --accent-soft: rgb(194 65 12 / 0.1);
+  --moss: #4f6536;
+  --moss-soft: rgb(79 101 54 / 0.12);
+  --amber: #9a5b06;
+  --amber-soft: rgb(154 91 6 / 0.1);
+  --glass: rgb(251 249 245 / 0.78);
+  --shadow: 0 1px 1px rgb(38 26 18 / 0.05), 0 4px 4px -1px rgb(38 26 18 / 0.04), 0 16px 32px -12px rgb(38 26 18 / 0.12);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+    --bg: #f5f2ec;
+    --surface-1: #fbf9f5;
+    --surface-2: #ffffff;
+    --surface-3: #ebe6dd;
+    --ink: 38 26 18;
+    --text: rgb(var(--ink));
+    --text-muted: rgb(var(--ink) / 0.64);
+    --text-dim: rgb(var(--ink) / 0.44);
+    --hairline: rgb(var(--ink) / 0.1);
+    --hairline-strong: rgb(var(--ink) / 0.18);
+    --highlight: rgb(255 255 255 / 0.7);
+    --accent: #c2410c;
+    --accent-hover: #a8380a;
+    --accent-ink: #fff8f1;
+    --accent-soft: rgb(194 65 12 / 0.1);
+    --moss: #4f6536;
+    --moss-soft: rgb(79 101 54 / 0.12);
+    --amber: #9a5b06;
+    --amber-soft: rgb(154 91 6 / 0.1);
+    --glass: rgb(251 249 245 / 0.78);
+    --shadow: 0 1px 1px rgb(38 26 18 / 0.05), 0 4px 4px -1px rgb(38 26 18 / 0.04), 0 16px 32px -12px rgb(38 26 18 / 0.12);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-text: var(--text);
+  --color-muted: var(--text-muted);
+  --color-dim: var(--text-dim);
+  --color-hairline: var(--hairline);
+  --color-hairline-strong: var(--hairline-strong);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-moss: var(--moss);
+  --color-moss-soft: var(--moss-soft);
+  --color-amber: var(--amber);
+  --color-amber-soft: var(--amber-soft);
+  --color-glass: var(--glass);
+
+  --font-sans: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-instrument), ui-serif, Georgia, serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --radius-card: 16px;
+  --radius-sm: 9px;
+
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-snap: cubic-bezier(0.35, 0, 0, 1);
+  --ease-hover: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --shadow-card: var(--shadow);
+}
+
+@layer base {
+  html {
+    background: var(--bg);
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01", "cv11";
+    letter-spacing: -0.006em;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  h1, h2, h3 {
+    text-wrap: balance;
+    font-weight: 480;
+    letter-spacing: -0.028em;
+  }
+  p { text-wrap: pretty; }
+  ::selection { background: var(--accent-soft); color: var(--text); }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  input, textarea, select, button { font: inherit; letter-spacing: inherit; }
+}
+
+@layer components {
+  /* Micro-label: frames big type. 10.5–11px mono uppercase. */
+  .label {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    line-height: 1.2;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    font-weight: 500;
+  }
+  .hairline { box-shadow: inset 0 0 0 0.5px var(--hairline-strong); }
+  .card {
+    background: var(--surface-1);
+    border-radius: var(--radius-card);
+    box-shadow: inset 0 0 0 0.5px var(--hairline-strong), inset 0 1px 0 var(--highlight);
+  }
+  .card-hover {
+    transition: background-color 160ms var(--ease-hover), box-shadow 160ms var(--ease-hover), transform 400ms var(--ease-out);
+  }
+  .card-hover:hover {
+    background: var(--surface-2);
+    box-shadow: inset 0 0 0 0.5px rgb(var(--ink) / 0.26), inset 0 1px 0 var(--highlight);
+  }
+  .rule-dashed {
+    background-image: linear-gradient(to right, var(--hairline-strong) 50%, transparent 0);
+    background-size: 6px 1px;
+    background-repeat: repeat-x;
+    height: 1px;
+  }
+  .num { font-variant-numeric: tabular-nums; }
+  .serif-em { font-family: var(--font-serif); font-style: italic; font-weight: 400; letter-spacing: -0.01em; }
+}
+
+/* Analog grain — kills gradient banding, adds warmth. */
+.grain::after {
+  content: "";
+  position: fixed;
+  inset: -50%;
+  pointer-events: none;
+  z-index: 60;
+  opacity: 0.045;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+:root[data-theme="light"] .grain::after { opacity: 0.03; }
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px); filter: blur(6px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+.reveal { animation: rise 700ms var(--ease-out) both; }
+.reveal-1 { animation-delay: 60ms; }
+.reveal-2 { animation-delay: 120ms; }
+.reveal-3 { animation-delay: 180ms; }
+.reveal-4 { animation-delay: 240ms; }
+
+@keyframes shimmer { to { background-position: -200% 0; } }
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+  border-radius: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .reveal { animation: none; }
 }
