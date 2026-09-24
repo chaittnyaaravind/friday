@@ -1,0 +1,85 @@
+/**
+ * Truth layer. Any resume text not written by the user (origin "profile" or "ai") must be
+ * backed by an eligible Candidate Profile fact. Checkable claims — numbers/metrics, years,
+ * technologies, and entry headings (employer, school, project) — are compared against the
+ * source fact. Anything unsupported is reported and blocks export.
+ */
+import { skillMentions } from "./parse";
+import { isEligible, type CandidateItem, type ResumeDoc } from "./types";
+
+export type Issue = { where: string; text: string; claim: string; reason: string };
+
+const norm = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9%$+#.]/g, "");
+const NUM_RE = /\$?\d[\d,]*(?:\.\d+)?\s?(?:%|k\b|m\b|x\b|\+)?/gi;
+
+/** Claims a reviewer could check: metrics/numbers/years and named technologies. */
+export function claimsIn(text: string): string[] {
+  const nums = (text.match(NUM_RE) ?? []).map((n) => n.replace(/\s+/g, "").replace(/,/g, ""));
+  const tech = skillMentions(text);
+  return [...new Set([...nums, ...tech])];
+}
+
+/** Claims in `text` with no support in `evidence` (used for any AI draft before saving). */
+export function unsupportedClaims(text: string, evidence: string): string[] {
+  const ev = norm(evidence.replace(/,/g, ""));
+  return claimsIn(text).filter((c) => !ev.includes(norm(c)));
+}
+
+function evidenceOf(item: CandidateItem) {
+  return `${JSON.stringify(item.data)}\n${item.source_text ?? ""}`;
+}
+
+export function validateDoc(doc: ResumeDoc, items: CandidateItem[]): { ok: boolean; issues: Issue[] } {
+  const issues: Issue[] = [];
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const eligible = items.filter(isEligible);
+  const allEvidence = eligible.map(evidenceOf).join("\n");
+  const skillNames = new Set(eligible.filter((i) => i.section === "skill").map((i) => norm((i.data as { name: string }).name)));
+
+  const check = (where: string, text: string, sourceItemId: string | null) => {
+    if (!text.trim()) return;
+    let evidence = allEvidence;
+    if (sourceItemId) {
+      const item = byId.get(sourceItemId);
+      if (!item) return issues.push({ where, text, claim: text, reason: "Not found in your profile." });
+      if (!isEligible(item)) return issues.push({ where, text, claim: text, reason: "Still needs your confirmation." });
+      evidence = evidenceOf(item);
+    }
+    for (const c of unsupportedClaims(text, evidence)) issues.push({ where, text, claim: c, reason: "No supporting evidence found in your profile." });
+  };
+
+  if (doc.header.origin !== "user") {
+    const ev = norm(allEvidence);
+    for (const c of doc.header.contact) if (!ev.includes(norm(c.replace(/^https?:\/\/(www\.)?/, "")))) issues.push({ where: "Header", text: c, claim: c, reason: "Not found in your profile." });
+  }
+
+  for (const s of doc.sections) {
+    for (const e of s.entries) {
+      if (e.origin !== "user") {
+        const item = e.sourceItemId ? byId.get(e.sourceItemId) : null;
+        if (!item) issues.push({ where: s.title, text: e.heading, claim: e.heading, reason: "Entry isn't linked to anything in your profile." });
+        else if (!isEligible(item)) issues.push({ where: s.title, text: e.heading, claim: e.heading, reason: "Still needs your confirmation." });
+        else {
+          const ev = norm(evidenceOf(item));
+          for (const part of [e.heading, e.subheading]) {
+            for (const piece of part.split(/\s*(?:·|,|—)\s*/)) {
+              const p = piece.replace(/^GPA:\s*/i, "");
+              if (p && !ev.includes(norm(p))) issues.push({ where: s.title, text: part, claim: p, reason: "Doesn't match the source in your profile." });
+            }
+          }
+          check(s.title, e.meta, e.sourceItemId);
+        }
+      }
+      for (const b of e.bullets) if (b.origin !== "user") check(`${s.title} · ${e.heading}`, b.text, b.sourceItemId ?? e.sourceItemId);
+    }
+    for (const l of s.lines) {
+      if (l.origin === "user") continue;
+      if (s.kind === "skills") {
+        for (const token of l.text.replace(/^[^:]{1,40}:\s*/, "").split(/\s*,\s*/)) {
+          if (token && !skillNames.has(norm(token))) issues.push({ where: "Skills", text: l.text, claim: token, reason: "Not a confirmed skill in your profile." });
+        }
+      } else check(s.title, l.text, l.sourceItemId);
+    }
+  }
+  return { ok: issues.length === 0, issues };
+}
