@@ -4,5 +4,5 @@ import { isAiConfigured } from "@/lib/ai/client";
 export const metadata = { title: "FRIDAY AI" };
 
 export default function ChatPage() {
-  return <Chat configured={isAiConfigured()} />;
+  return <Chat claude={isAiConfigured() && process.env.FRIDAY_CHAT_ENGINE !== "local"} />;
 }

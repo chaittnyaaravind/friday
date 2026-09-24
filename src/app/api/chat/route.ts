@@ -1,7 +1,8 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { errorResponse } from "@/lib/api";
-import { claude, FALLBACK_BETA, friendlyAiError, MODEL } from "@/lib/ai/client";
+import { claude, FALLBACK_BETA, friendlyAiError, isAiConfigured, isAiUnavailable, MODEL } from "@/lib/ai/client";
+import { answerLocally } from "@/lib/chat/local";
 import { searchJobs } from "@/lib/data/jobs";
 import { loadProfileItems } from "@/lib/resume/profile";
 import { tailorProposal } from "@/lib/resume/tailor";
@@ -115,22 +116,31 @@ How you work:
 - Be concise and direct. Short paragraphs or tight lists.`;
 }
 
-/** POST /api/chat — FRIDAY assistant, streamed as SSE: `data: {"type":"text"|"tool"|"done"|"error", ...}` */
+/**
+ * Which engine answers: FRIDAY_CHAT_ENGINE = "auto" (default) | "local" | "claude".
+ * In auto mode Claude is used when it works; if it's unconfigured or unavailable (no key,
+ * no credits, outage) FRIDAY Local answers instead and Claude is skipped for 10 minutes.
+ */
+const ENGINE = (process.env.FRIDAY_CHAT_ENGINE ?? "auto").toLowerCase();
+const RETRY_CLAUDE_MS = 10 * 60_000;
+let claudeDownUntil = 0;
+
+const wantsClaude = () => ENGINE !== "local" && isAiConfigured() && (ENGINE === "claude" || Date.now() >= claudeDownUntil);
+
+/** POST /api/chat — FRIDAY assistant, streamed as SSE: `data: {"type":"mode"|"text"|"tool"|"done"|"error", ...}` */
 export async function POST(req: Request) {
   let db: Db;
   let userId: string;
-  let messages: Anthropic.Beta.BetaMessageParam[];
+  let history: z.infer<typeof Body>["messages"];
   let sys: string;
   try {
     db = await createSupabaseServer();
     const { data } = await db.auth.getUser();
     if (!data.user) return Response.json({ error: "Sign in required" }, { status: 401 });
     userId = data.user.id;
-    const input = Body.parse(await req.json());
-    messages = input.messages.map((m) => ({ role: m.role, content: m.content }));
+    history = Body.parse(await req.json()).messages;
     const { data: profile } = await db.from("profiles").select("full_name, major, work_authorization, origin_label").eq("id", userId).single();
     sys = system(profile);
-    claude(); // throws AiNotConfiguredError → 503 before streaming starts
   } catch (e) {
     return errorResponse(e);
   }
@@ -139,47 +149,24 @@ export async function POST(req: Request) {
   const stream = new ReadableStream({
     async start(controller) {
       const send = (obj: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+      let sentText = false;
       try {
-        for (let turn = 0; turn < 6; turn++) {
-          const s = claude().beta.messages.stream({
-            model: MODEL,
-            max_tokens: 16000,
-            betas: [FALLBACK_BETA],
-            fallbacks: "default",
-            thinking: { type: "adaptive" },
-            output_config: { effort: "medium" },
-            system: sys,
-            tools: TOOLS.map(({ name, description, input_schema, eager_input_streaming }) => ({ name, description, input_schema, eager_input_streaming })),
-            messages,
-          });
-          for await (const ev of s) {
-            if (ev.type === "content_block_delta" && ev.delta.type === "text_delta") send({ type: "text", text: ev.delta.text });
+        if (wantsClaude()) {
+          try {
+            send({ type: "mode", mode: "claude" });
+            await runClaude(db, userId, sys, history, (t) => { sentText = true; send({ type: "text", text: t }); }, (name) => send({ type: "tool", name }));
+            send({ type: "done" });
+            return;
+          } catch (e) {
+            // Mid-answer failures are reported; a Claude that can't be reached hands over to Local.
+            if (sentText || !isAiUnavailable(e) || ENGINE === "claude") throw e;
+            claudeDownUntil = Date.now() + RETRY_CLAUDE_MS;
           }
-          const msg = await s.finalMessage();
-          if (msg.stop_reason === "refusal") {
-            send({ type: "error", error: "FRIDAY can't help with that request." });
-            break;
-          }
-          // Only run tools on a clean tool_use stop (a max_tokens stop may carry truncated input).
-          const calls = msg.content.filter((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === "tool_use");
-          if (msg.stop_reason !== "tool_use" || !calls.length) break;
-
-          messages.push({ role: "assistant", content: msg.content });
-          const results = await Promise.all(
-            calls.map(async (c): Promise<Anthropic.Beta.BetaToolResultBlockParam> => {
-              const tool = TOOLS.find((t) => t.name === c.name);
-              send({ type: "tool", name: c.name });
-              const parsed = tool?.schema.safeParse(c.input);
-              if (!tool || !parsed?.success) return { type: "tool_result", tool_use_id: c.id, is_error: true, content: "INVALID_INPUT" };
-              try {
-                return { type: "tool_result", tool_use_id: c.id, content: JSON.stringify(await tool.run(db, userId, parsed.data as never)) };
-              } catch (e) {
-                return { type: "tool_result", tool_use_id: c.id, is_error: true, content: e instanceof Error ? e.message : "Tool failed" };
-              }
-            }),
-          );
-          messages.push({ role: "user", content: results });
         }
+        send({ type: "mode", mode: "local" });
+        const answer = await answerLocally(db, userId, history);
+        for (const name of answer.tools) send({ type: "tool", name });
+        for (const chunk of answer.text.match(/[^\n]*\n?/g) ?? []) if (chunk) send({ type: "text", text: chunk });
         send({ type: "done" });
       } catch (e) {
         send({ type: "error", error: friendlyAiError(e) ?? (e instanceof Error ? e.message : "Something went wrong") });
@@ -189,4 +176,49 @@ export async function POST(req: Request) {
     },
   });
   return new Response(stream, { headers: { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-cache, no-transform", connection: "keep-alive" } });
+}
+
+/** Claude tool-use loop. Throws before any text if Claude is unreachable. */
+async function runClaude(db: Db, userId: string, sys: string, history: z.infer<typeof Body>["messages"], onText: (t: string) => void, onTool: (name: string) => void) {
+  const messages: Anthropic.Beta.BetaMessageParam[] = history.map((m) => ({ role: m.role, content: m.content }));
+  for (let turn = 0; turn < 6; turn++) {
+    const s = claude().beta.messages.stream({
+      model: MODEL,
+      max_tokens: 16000,
+      betas: [FALLBACK_BETA],
+      fallbacks: "default",
+      thinking: { type: "adaptive" },
+      output_config: { effort: "medium" },
+      system: sys,
+      tools: TOOLS.map(({ name, description, input_schema, eager_input_streaming }) => ({ name, description, input_schema, eager_input_streaming })),
+      messages,
+    });
+    for await (const ev of s) {
+      if (ev.type === "content_block_delta" && ev.delta.type === "text_delta") onText(ev.delta.text);
+    }
+    const msg = await s.finalMessage();
+    if (msg.stop_reason === "refusal") {
+      onText("FRIDAY can't help with that request.");
+      return;
+    }
+    // Only run tools on a clean tool_use stop (a max_tokens stop may carry truncated input).
+    const calls = msg.content.filter((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === "tool_use");
+    if (msg.stop_reason !== "tool_use" || !calls.length) return;
+
+    messages.push({ role: "assistant", content: msg.content });
+    const results = await Promise.all(
+      calls.map(async (c): Promise<Anthropic.Beta.BetaToolResultBlockParam> => {
+        const tool = TOOLS.find((t) => t.name === c.name);
+        onTool(c.name);
+        const parsed = tool?.schema.safeParse(c.input);
+        if (!tool || !parsed?.success) return { type: "tool_result", tool_use_id: c.id, is_error: true, content: "INVALID_INPUT" };
+        try {
+          return { type: "tool_result", tool_use_id: c.id, content: JSON.stringify(await tool.run(db, userId, parsed.data as never)) };
+        } catch (e) {
+          return { type: "tool_result", tool_use_id: c.id, is_error: true, content: e instanceof Error ? e.message : "Tool failed" };
+        }
+      }),
+    );
+    messages.push({ role: "user", content: results });
+  }
 }

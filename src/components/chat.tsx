@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { cx } from "./ui";
 
-type Msg = { role: "user" | "assistant"; content: string };
+type Msg = { role: "user" | "assistant"; content: string; mode?: "claude" | "local" };
 
 const PROMPTS = [
   "Find me SJSU jobs posted this week.",
@@ -26,7 +26,7 @@ const TOOL_LABEL: Record<string, string> = {
   tailor_resume: "Tailoring your resume",
 };
 
-export function Chat({ configured }: { configured: boolean }) {
+export function Chat({ claude }: { claude: boolean }) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -42,9 +42,10 @@ export function Chat({ configured }: { configured: boolean }) {
     setMsgs([...history, { role: "assistant", content: "" }]);
     setInput("");
     setBusy(true);
-    const append = (t: string) => setMsgs((m) => [...m.slice(0, -1), { role: "assistant", content: m[m.length - 1].content + t }]);
+    const append = (t: string) => setMsgs((m) => [...m.slice(0, -1), { ...m[m.length - 1], content: m[m.length - 1].content + t }]);
+    const setMode = (mode: Msg["mode"]) => setMsgs((m) => [...m.slice(0, -1), { ...m[m.length - 1], mode }]);
     try {
-      const res = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ messages: history.slice(-20) }) });
+      const res = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ messages: history.slice(-20).map(({ role, content }) => ({ role, content })) }) });
       if (!res.ok || !res.body) {
         const e = await res.json().catch(() => ({}));
         append(e.error ?? "Something went wrong.");
@@ -61,8 +62,9 @@ export function Chat({ configured }: { configured: boolean }) {
         buf = parts.pop() ?? "";
         for (const p of parts) {
           if (!p.startsWith("data: ")) continue;
-          const ev = JSON.parse(p.slice(6)) as { type: string; text?: string; name?: string; error?: string };
-          if (ev.type === "text") { setTool(null); append(ev.text!); }
+          const ev = JSON.parse(p.slice(6)) as { type: string; text?: string; name?: string; error?: string; mode?: Msg["mode"] };
+          if (ev.type === "mode") setMode(ev.mode);
+          else if (ev.type === "text") { setTool(null); append(ev.text!); }
           else if (ev.type === "tool") setTool(TOOL_LABEL[ev.name!] ?? "Working");
           else if (ev.type === "error") append(`\n\n${ev.error}`);
         }
@@ -85,10 +87,10 @@ export function Chat({ configured }: { configured: boolean }) {
               <h1 className="text-[38px] leading-[1.02] md:text-[54px]">What are we <span className="serif-em">hunting</span> for?</h1>
               <p className="max-w-[52ch] text-[15px] text-muted">Ask about jobs, your matches, what to learn, or your applications. FRIDAY answers from verified listings and your own tracker — it never invents a job or submits anything for you.</p>
             </div>
-            {!configured && <p className="text-[13px] text-amber">FRIDAY AI needs ANTHROPIC_API_KEY on the server before it can answer.</p>}
+            <p className="flex items-center gap-2 text-[12.5px] text-dim"><span className={cx("size-1.5 rounded-full", claude ? "bg-moss" : "bg-accent")} />{claude ? "Uses Claude when it's available; otherwise FRIDAY Local answers straight from your data." : "Running on FRIDAY Local — answers come straight from your data, no AI credits needed."}</p>
             <div className="grid gap-2 sm:grid-cols-2">
               {PROMPTS.map((p) => (
-                <button key={p} onClick={() => send(p)} disabled={!configured} className="card card-hover p-4 text-left text-[14px] text-muted hover:text-text disabled:opacity-50">{p}</button>
+                <button key={p} onClick={() => send(p)} className="card card-hover p-4 text-left text-[14px] text-muted hover:text-text disabled:opacity-50">{p}</button>
               ))}
             </div>
           </div>
@@ -99,7 +101,7 @@ export function Chat({ configured }: { configured: boolean }) {
               <div className="max-w-[80%] rounded-[18px] rounded-br-md bg-surface-3 px-4 py-2.5 text-[14.5px]">{m.content}</div>
             ) : (
               <div className="max-w-[92%] text-[15px] leading-[1.7]">
-                <span className="label mb-1.5 block">FRIDAY</span>
+                <span className="label mb-1.5 flex items-center gap-2">FRIDAY{m.mode === "local" && <span title="Answered by FRIDAY's own engine from your data — no AI service used" className="rounded-full px-1.5 py-px normal-case tracking-normal text-dim [box-shadow:inset_0_0_0_0.5px_var(--hairline-strong)]">Local</span>}</span>
                 {m.content ? <Markdown text={m.content} /> : <span className="inline-flex items-center gap-2 text-muted"><Loader2 size={14} className="animate-spin" /> {tool ?? "Thinking"}…</span>}
                 {m.content && busy && i === msgs.length - 1 && tool && <span className="mt-2 flex items-center gap-2 text-[12.5px] text-dim"><Loader2 size={12} className="animate-spin" /> {tool}…</span>}
               </div>
@@ -117,10 +119,9 @@ export function Chat({ configured }: { configured: boolean }) {
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }}
             rows={1}
             placeholder="Ask FRIDAY…"
-            disabled={!configured}
             className="max-h-40 min-h-10 flex-1 resize-none bg-transparent py-2.5 text-[15px] outline-none placeholder:text-dim"
           />
-          <button type="submit" disabled={busy || !input.trim() || !configured} aria-label="Send" className="grid size-10 shrink-0 place-items-center rounded-full bg-accent text-accent-ink transition-[opacity,transform] active:scale-95 disabled:opacity-35">
+          <button type="submit" disabled={busy || !input.trim()} aria-label="Send" className="grid size-10 shrink-0 place-items-center rounded-full bg-accent text-accent-ink transition-[opacity,transform] active:scale-95 disabled:opacity-35">
             {busy ? <Loader2 size={17} className="animate-spin" /> : <ArrowUp size={17} />}
           </button>
         </div>
@@ -151,7 +152,7 @@ function Inline({ s }: { s: string }) {
     <>
       {parts.map((p, i) => {
         const bold = p.match(/^\*\*([^*]+)\*\*$/);
-        if (bold) return <strong key={i} className="font-medium text-text">{bold[1]}</strong>;
+        if (bold) return <strong key={i} className="font-medium text-text"><Inline s={bold[1]} /></strong>;
         const link = p.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
         if (link) {
           const [, label, href] = link;

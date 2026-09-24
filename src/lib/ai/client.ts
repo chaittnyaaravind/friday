@@ -46,6 +46,11 @@ export function friendlyAiError(e: unknown): string | null {
   return null;
 }
 
+/** True when Claude can't be reached at all (no key, bad key, no credits, outage) — callers fall back. */
+export function isAiUnavailable(e: unknown): boolean {
+  return e instanceof AiNotConfiguredError || e instanceof Anthropic.APIError || e instanceof Anthropic.APIConnectionError;
+}
+
 export function isAiConfigured() {
   return Boolean(process.env.ANTHROPIC_API_KEY);
 }
