@@ -1,5 +1,6 @@
 import { format, parseISO } from "date-fns";
 import Link from "next/link";
+import { Reveal } from "@/components/motion";
 import { Card, EmptyState, Label, PageHeader, cx } from "@/components/ui";
 import { createSupabaseServer, requireUser } from "@/lib/supabase/server";
 
@@ -62,7 +63,7 @@ export default async function CalendarPage() {
             const d = parseISO(day);
             const overdue = day < today;
             return (
-              <section key={day} className="grid gap-3 md:grid-cols-[140px_1fr]">
+              <Reveal as="section" key={day} className="grid gap-3 md:grid-cols-[140px_1fr]">
                 <div className="flex items-baseline gap-2 md:flex-col md:gap-0.5">
                   <span className={cx("num text-[30px] font-light leading-none tracking-[-0.03em]", day === today && "text-accent", overdue && "text-dim")}>{format(d, "d")}</span>
                   <Label>{day === today ? "Today" : overdue ? `${format(d, "EEE, MMM")} · overdue` : format(d, "EEE, MMM")}</Label>
@@ -79,7 +80,7 @@ export default async function CalendarPage() {
                     </Link>
                   ))}
                 </Card>
-              </section>
+              </Reveal>
             );
           })}
         </div>

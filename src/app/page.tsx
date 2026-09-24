@@ -1,5 +1,6 @@
 import { ArrowUpRight } from "lucide-react";
 import { HeroStack } from "@/components/hero-stack";
+import { Reveal, ScrollFade, ScrollProgress, Stagger, WordReveal } from "@/components/motion";
 import { Card, Label, LinkButton } from "@/components/ui";
 import { REGISTRY } from "@/lib/discovery/registry";
 import { getUser } from "@/lib/supabase/server";
@@ -12,7 +13,8 @@ export default async function Landing() {
   const cta = user ? { href: "/dashboard", label: "Open FRIDAY" } : { href: "/login", label: "Get started" };
 
   return (
-    <div className="relative overflow-hidden">
+    <div className="relative overflow-x-clip">
+      <ScrollProgress />
       {/* viewport-edge glow — frames the hero like a lens */}
       <div aria-hidden className="pointer-events-none fixed inset-0 z-0 [background:radial-gradient(120%_80%_at_0%_100%,rgb(220_80_0/.16),transparent_45%),radial-gradient(90%_70%_at_100%_0%,rgb(143_165_107/.10),transparent_50%)]" />
 
@@ -25,7 +27,7 @@ export default async function Landing() {
       </header>
 
       <section className="relative z-10 mx-auto grid max-w-[1240px] items-center gap-12 px-5 pb-20 pt-8 md:grid-cols-[1.05fr_1fr] md:px-10 md:pb-28 md:pt-16">
-        <div className="reveal flex flex-col gap-7">
+        <ScrollFade className="reveal flex flex-col gap-7">
           <Label>For San José State students</Label>
           <h1 className="text-[52px] font-[450] leading-[0.94] tracking-[-0.045em] md:text-[88px]">
             Your career
@@ -41,14 +43,23 @@ export default async function Landing() {
             <LinkButton href={cta.href} variant="primary" size="lg">{cta.label}</LinkButton>
             <a href="#how" className="inline-flex h-12 items-center gap-1.5 px-2 text-[14px] text-muted hover:text-text">See how it works <ArrowUpRight size={15} /></a>
           </div>
-        </div>
+        </ScrollFade>
         <div className="reveal reveal-2">
           <HeroStack />
           <p className="label mt-2 text-center !text-[9.5px]">Preview · real listings found by FRIDAY</p>
         </div>
       </section>
 
-      <section id="how" className="relative z-10 mx-auto max-w-[1240px] px-5 pb-24 md:px-10">
+      <div id="how" className="relative z-10 mx-auto max-w-[1240px] px-5 md:px-10">
+        <WordReveal
+          kicker="What FRIDAY does"
+          text="FRIDAY finds the jobs, checks every source, explains each match, and prepares your application. You review. You apply."
+          highlight={["review", "apply"]}
+        />
+      </div>
+
+      <section className="relative z-10 mx-auto max-w-[1240px] px-5 pb-24 md:px-10">
+        <Reveal>
         <div className="rule-dashed mb-10" />
         <Label>The agent loop</Label>
         <ol className="mt-5 flex flex-wrap gap-x-2 gap-y-3 text-[15px] md:text-[18px]">
@@ -60,8 +71,9 @@ export default async function Landing() {
           ))}
         </ol>
         <p className="mt-4 max-w-[60ch] text-[13.5px] text-muted">The two steps in orange are always yours. FRIDAY never submits an application, solves a CAPTCHA, or signs in anywhere on your behalf.</p>
+        </Reveal>
 
-        <div className="mt-16 grid gap-3 md:grid-cols-3">
+        <Stagger className="mt-16 grid gap-3 md:grid-cols-3" gap={0.09}>
           {[
             ["01", "SJSU first", "On-campus jobs from official SJSU pages — Library, Associated Students, Peer Connections and more — plus one-step import from Handshake."],
             ["02", "Straight from the source", "Internships from NVIDIA, Adobe, Cisco, Waymo and dozens more, read from each company's own careers system. Duplicates merge; the official apply link wins."],
@@ -73,14 +85,14 @@ export default async function Landing() {
               <p className="text-[14px] leading-relaxed text-muted">{b}</p>
             </Card>
           ))}
-        </div>
+        </Stagger>
 
-        <div className="mt-16 flex flex-col items-start justify-between gap-6 md:flex-row md:items-end">
+        <Reveal className="mt-24 flex flex-col items-start justify-between gap-6 md:flex-row md:items-end">
           <h2 className="max-w-[18ch] text-[36px] leading-[1] md:text-[52px]">
             Stop checking <span className="serif-em">twenty</span> sites every day.
           </h2>
           <LinkButton href={cta.href} variant="primary" size="lg">{cta.label}</LinkButton>
-        </div>
+        </Reveal>
       </section>
 
       <footer className="relative z-10 mx-auto flex max-w-[1240px] flex-col justify-between gap-2 px-5 pb-8 text-[11.5px] text-dim md:flex-row md:px-10">

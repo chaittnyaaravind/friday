@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Reveal } from "@/components/motion";
 import { ResumeUpload, VersionView } from "@/components/resume-studio";
 import { Card, Chip, Label, PageHeader, SectionHeader, cx } from "@/components/ui";
 import type { ParsedResume } from "@/lib/ai/tasks";
@@ -86,7 +87,7 @@ export default async function ResumePage({ searchParams }: PageProps<"/resume">)
           </section>
 
           {parsed && (
-            <section className="flex flex-col gap-4">
+            <Reveal as="section" className="flex flex-col gap-4">
               <SectionHeader eyebrow="Extracted from your resume" title="What FRIDAY read" />
               <div className="grid gap-3 md:grid-cols-2">
                 <Card className="flex flex-col gap-3 p-5">
@@ -114,7 +115,7 @@ export default async function ResumePage({ searchParams }: PageProps<"/resume">)
                   ))}
                 </Card>
               </div>
-            </section>
+            </Reveal>
           )}
         </div>
       </div>

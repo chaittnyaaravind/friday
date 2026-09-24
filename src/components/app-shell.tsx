@@ -7,6 +7,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { ago } from "@/lib/format";
+import { ScrollProgress } from "./motion";
 import { cx } from "./ui";
 
 const NAV = [
@@ -35,6 +36,7 @@ export function AppShell({ children, name }: { children: ReactNode; name: string
 
   return (
     <div className="min-h-dvh md:grid md:grid-cols-[232px_1fr]">
+      <ScrollProgress />
       {/* Desktop sidebar */}
       <aside className="sticky top-0 hidden h-dvh flex-col gap-1 border-r-[0.5px] border-hairline-strong px-3 py-5 md:flex">
         <Link href="/dashboard" className="mb-6 flex items-baseline gap-2 px-3">

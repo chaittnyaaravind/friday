@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import Link from "next/link";
 import type { ComponentProps, ReactNode } from "react";
+import { ScrollFade } from "./motion";
 
 export { clsx as cx };
 
@@ -52,6 +53,7 @@ export function SectionHeader({ eyebrow, title, action, className }: { eyebrow?:
 
 export function PageHeader({ eyebrow, title, sub, actions }: { eyebrow: string; title: ReactNode; sub?: ReactNode; actions?: ReactNode }) {
   return (
+    <ScrollFade>
     <header className="reveal flex flex-col gap-5 pb-8 md:flex-row md:items-end md:justify-between md:pb-10">
       <div className="flex max-w-[640px] flex-col gap-3">
         <Label>{eyebrow}</Label>
@@ -60,6 +62,7 @@ export function PageHeader({ eyebrow, title, sub, actions }: { eyebrow: string; 
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
     </header>
+    </ScrollFade>
   );
 }
 

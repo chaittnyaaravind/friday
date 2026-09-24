@@ -1,9 +1,12 @@
 "use client";
 
 import { Check, AlertTriangle } from "lucide-react";
+import { motion, motionValue, useReducedMotion, useScroll, useSpring, useTransform, type MotionValue } from "motion/react";
 import { useEffect, useRef } from "react";
 
 /** Real listings FRIDAY discovered during development — shown as a product preview, not live data. */
+const STATIC_ZERO = motionValue(0);
+
 const CARDS = [
   { co: "SJSU King Library", title: "IT Helpdesk Student Assistant", meta: "SJSU Campus · On-campus", score: 91, ok: ["On campus", "Student role"], miss: [] as string[] },
   { co: "Cisco", title: "Software Engineer Full Stack / Backend I (Intern)", meta: "San Jose, CA · 1 mi", score: 84, ok: ["Java", "Python", "REST APIs"], miss: ["Kubernetes"] },
@@ -12,6 +15,11 @@ const CARDS = [
 
 export function HeroStack() {
   const stage = useRef<HTMLDivElement>(null);
+  const reduced = useReducedMotion();
+  // Scroll-linked: as the hero scrolls away the deck fans out in depth and tilts toward you.
+  const { scrollY } = useScroll();
+  const raw = useTransform(scrollY, [0, 640], [0, 1], { clamp: true });
+  const spread = useSpring(raw, { stiffness: 90, damping: 24, mass: 0.6 });
 
   useEffect(() => {
     const el = stage.current;
@@ -27,6 +35,7 @@ export function HeroStack() {
       y += (ty - y) * 0.06;
       el.style.setProperty("--rx", `${(-y * 6).toFixed(2)}deg`);
       el.style.setProperty("--ry", `${(x * 9).toFixed(2)}deg`);
+      el.style.setProperty("--sx", `${(-spread.get() * 10).toFixed(2)}deg`);
       raf = requestAnimationFrame(tick);
     };
     window.addEventListener("pointermove", onMove, { passive: true });
@@ -35,21 +44,17 @@ export function HeroStack() {
       window.removeEventListener("pointermove", onMove);
       cancelAnimationFrame(raf);
     };
-  }, []);
+  }, [spread]);
 
   return (
     <div className="relative mx-auto aspect-[4/3.8] w-full max-w-[520px] [perspective:1400px]">
       <div
         ref={stage}
         className="absolute inset-0 [transform-style:preserve-3d]"
-        style={{ transform: "rotateX(calc(14deg + var(--rx, 0deg))) rotateY(calc(-18deg + var(--ry, 0deg)))" }}
+        style={{ transform: "rotateX(calc(14deg + var(--rx, 0deg) + var(--sx, 0deg))) rotateY(calc(-18deg + var(--ry, 0deg)))" }}
       >
         {CARDS.map((c, i) => (
-          <div
-            key={c.title}
-            className="hero-card absolute left-1/2 top-1/2 w-[86%]"
-            style={{ transform: `translate3d(-50%, calc(-50% + ${(i - 1) * 104}px), ${(1 - i) * 90}px)`, animationDelay: `${300 + i * 140}ms` }}
-          >
+          <DeckCard key={c.title} i={i} spread={reduced ? null : spread}>
             <div className="card flex flex-col gap-3 p-4 [box-shadow:inset_0_0_0_0.5px_var(--hairline-strong),inset_0_1px_0_var(--highlight),0_30px_60px_-30px_rgb(0_0_0/.8)]">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -67,7 +72,7 @@ export function HeroStack() {
                 {c.miss.map((o) => <span key={o} className="inline-flex h-5 items-center gap-1 rounded-full bg-[rgb(var(--ink)/.06)] px-2 text-[10.5px] text-muted"><AlertTriangle size={9} className="text-amber" />{o}</span>)}
               </div>
             </div>
-          </div>
+          </DeckCard>
         ))}
       </div>
       <style>{`
@@ -76,5 +81,18 @@ export function HeroStack() {
         @media (prefers-reduced-motion: reduce) { .hero-card { animation: none; } }
       `}</style>
     </div>
+  );
+}
+
+function DeckCard({ i, spread, children }: { i: number; spread: MotionValue<number> | null; children: React.ReactNode }) {
+  const transform = useTransform(spread ?? STATIC_ZERO, (v: number) => {
+    const gap = 104 + v * 70;
+    const depth = 90 + v * 110;
+    return `translate3d(-50%, calc(-50% + ${(i - 1) * gap}px), ${(1 - i) * depth}px) rotateZ(${(i - 1) * v * 2.2}deg)`;
+  });
+  return (
+    <motion.div className="hero-card absolute left-1/2 top-1/2 w-[86%]" style={{ transform, animationDelay: `${300 + i * 140}ms` }}>
+      {children}
+    </motion.div>
   );
 }

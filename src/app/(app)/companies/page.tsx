@@ -1,6 +1,7 @@
 import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { FollowButton, RunAgentButton } from "@/components/actions";
+import { Reveal, Stagger } from "@/components/motion";
 import { Card, CompanyMark, Label, PageHeader, SectionHeader } from "@/components/ui";
 import { ago } from "@/lib/format";
 import { createSupabaseServer, requireUser } from "@/lib/supabase/server";
@@ -46,7 +47,7 @@ export default async function Companies({ searchParams }: PageProps<"/companies"
           <section className="flex flex-col gap-5">
             <SectionHeader eyebrow="No public feed FRIDAY may read" title="Career pages to check yourself" />
             <p className="-mt-2 max-w-[62ch] text-[13.5px] text-muted">These companies don&apos;t publish a feed FRIDAY is permitted to read. Follow them to keep them on your radar, open their student careers page, and import any listing you find.</p>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            <Stagger className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3" gap={0.04}>
               {watchOnly.map((c) => (
                 <Card key={c.id} className="flex items-center gap-3 p-4">
                   <CompanyMark name={c.name} size={34} />
@@ -57,7 +58,7 @@ export default async function Companies({ searchParams }: PageProps<"/companies"
                   <FollowButton companyId={c.id} following={c.following} />
                 </Card>
               ))}
-            </div>
+            </Stagger>
           </section>
         )}
       </div>
@@ -67,9 +68,9 @@ export default async function Companies({ searchParams }: PageProps<"/companies"
 
 function Group({ title, eyebrow, items }: { title: string; eyebrow: string; items: Co[] }) {
   return (
-    <section className="flex flex-col gap-5">
+    <Reveal as="section" className="flex flex-col gap-5">
       <SectionHeader eyebrow={eyebrow} title={title} />
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      <Stagger className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3" gap={0.04}>
         {items.map((c) => (
           <Link key={c.id} href={`/companies/${c.slug}`}>
             <Card interactive className="flex h-full flex-col gap-4 p-4">
@@ -91,7 +92,7 @@ function Group({ title, eyebrow, items }: { title: string; eyebrow: string; item
             </Card>
           </Link>
         ))}
-      </div>
-    </section>
+      </Stagger>
+    </Reveal>
   );
 }

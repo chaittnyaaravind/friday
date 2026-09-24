@@ -3,9 +3,10 @@ import Link from "next/link";
 import type { JobListItem } from "@/lib/data/jobs";
 import { ago, deadlineLabel, miles, place, TYPE_LABEL } from "@/lib/format";
 import { SaveButton } from "./actions";
+import { Stagger } from "./motion";
 import { Card, Chip, CompanyMark, EmptyState, MatchBadge, cx } from "./ui";
 
-export function JobCard({ job, index = 0 }: { job: JobListItem; index?: number }) {
+export function JobCard({ job }: { job: JobListItem }) {
   const dl = deadlineLabel(job.deadline);
   const strongSkills = (job.strong ?? []).filter((r) => r.kind === "skill").slice(0, 3);
   const missing = (job.missing ?? []).filter((m) => m.kind === "required").slice(0, 2);
@@ -13,7 +14,7 @@ export function JobCard({ job, index = 0 }: { job: JobListItem; index?: number }
   const alsoOn = job.sources.filter((s) => s !== official).map((s) => s.name.replace(/\s*\(.*\)$/, ""));
 
   return (
-    <Link href={`/jobs/${job.id}`} className={cx("reveal block", index < 6 && `reveal-${Math.min(index, 4)}`)}>
+    <Link href={`/jobs/${job.id}`} className="block h-full">
       <Card interactive className="flex h-full flex-col gap-4 p-5">
         <div className="flex items-start gap-3">
           <CompanyMark name={job.company_name} />
@@ -67,10 +68,10 @@ export function JobCard({ job, index = 0 }: { job: JobListItem; index?: number }
 export function JobGrid({ jobs, empty }: { jobs: JobListItem[]; empty?: { title: string; body?: React.ReactNode; action?: React.ReactNode } }) {
   if (!jobs.length) return <EmptyState title={empty?.title ?? "Nothing here yet"} body={empty?.body} action={empty?.action} />;
   return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      {jobs.map((j, i) => (
-        <JobCard key={j.id} job={j} index={i} />
+    <Stagger className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      {jobs.map((j) => (
+        <JobCard key={j.id} job={j} />
       ))}
-    </div>
+    </Stagger>
   );
 }

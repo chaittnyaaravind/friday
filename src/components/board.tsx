@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { ago, dateTime, shortDate, STATUS_LABEL, STATUS_ORDER, type AppStatus } from "@/lib/format";
 import { api } from "./actions";
+import { CountUp, Stagger } from "./motion";
 import { Button, Card, CompanyMark, Field, Input, Label, Select, Textarea, cx } from "./ui";
 
 export type App = {
@@ -294,7 +295,7 @@ export function BoardSummary({ apps }: { apps: App[] }) {
   const interviews = apps.filter((a) => ["interview", "offer"].includes(a.status)).length;
   const rate = applied ? Math.round((interviews / applied) * 100) : null;
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+    <Stagger className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       {[
         ["Tracked", apps.length],
         ["Applied", applied],
@@ -303,9 +304,9 @@ export function BoardSummary({ apps }: { apps: App[] }) {
       ].map(([l, v]) => (
         <Card key={l} className="flex flex-col gap-2 p-4">
           <Label>{l}</Label>
-          <span className="num text-[28px] font-light leading-none tracking-[-0.03em]">{v}</span>
+          {typeof v === "number" ? <CountUp value={v} className="num text-[28px] font-light leading-none tracking-[-0.03em]" /> : <span className="num text-[28px] font-light leading-none tracking-[-0.03em]">{v}</span>}
         </Card>
       ))}
-    </div>
+    </Stagger>
   );
 }

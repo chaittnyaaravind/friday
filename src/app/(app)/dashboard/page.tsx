@@ -2,6 +2,7 @@ import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { RunAgentButton } from "@/components/actions";
 import { JobGrid } from "@/components/job-card";
+import { CountUp, Reveal, Stagger } from "@/components/motion";
 import { Card, CompanyMark, Label, LinkButton, MatchBadge, Notice, SectionHeader, cx } from "@/components/ui";
 import { searchJobs } from "@/lib/data/jobs";
 import { ago, greeting, miles, place, TYPE_LABEL } from "@/lib/format";
@@ -76,24 +77,24 @@ export default async function Dashboard() {
         </Notice>
       )}
 
-      <section className="reveal reveal-1 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+      <Stagger className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {stats.map((s) => (
           <Link key={s.label} href={s.href}>
             <Card interactive className="flex h-full flex-col gap-3 p-4">
               <Label>{s.label}</Label>
-              <span className="num text-[34px] font-light leading-none tracking-[-0.03em]">{s.value}</span>
+              <CountUp value={s.value} className="num text-[34px] font-light leading-none tracking-[-0.03em]" />
             </Card>
           </Link>
         ))}
-      </section>
+      </Stagger>
 
-      <section className="flex flex-col gap-5">
+      <Reveal as="section" className="flex flex-col gap-5">
         <SectionHeader eyebrow="Ranked for you" title="Best new opportunities" action={<LinkButton href="/discover" variant="ghost" size="sm">See all <ArrowUpRight size={14} /></LinkButton>} />
         <JobGrid jobs={best.jobs} empty={{ title: "No recent listings yet", body: "Run FRIDAY to search every source, or widen your filters in Discover.", action: <RunAgentButton /> }} />
-      </section>
+      </Reveal>
 
       <div className="grid gap-10 lg:grid-cols-[1.35fr_1fr] lg:gap-8">
-        <section className="flex flex-col gap-5">
+        <Reveal as="section" className="flex flex-col gap-5">
           <SectionHeader eyebrow={`Within ${radius} mi of ${profile?.origin_label ?? "SJSU"}`} title="Around you" action={<LinkButton href={`/discover?miles=${radius}&sort=distance&includeRemote=0`} variant="ghost" size="sm">Map it out <ArrowUpRight size={14} /></LinkButton>} />
           <Card className="divide-y-[0.5px] divide-hairline-strong">
             {nearby.jobs.length ? (
@@ -112,9 +113,9 @@ export default async function Dashboard() {
               <p className="p-5 text-[14px] text-muted">Nothing within {radius} miles right now. Widen your radius in Settings.</p>
             )}
           </Card>
-        </section>
+        </Reveal>
 
-        <section className="flex flex-col gap-5">
+        <Reveal as="section" delay={0.08} className="flex flex-col gap-5">
           <SectionHeader eyebrow="Official SJSU pages" title="SJSU on-campus" action={<LinkButton href="/sjsu" variant="ghost" size="sm">All <ArrowUpRight size={14} /></LinkButton>} />
           <div className="flex flex-col gap-2">
             {campus.jobs.length ? (
@@ -133,13 +134,13 @@ export default async function Dashboard() {
               <Card className="p-5 text-[14px] text-muted">No on-campus postings found on official pages yet. Most are posted on Handshake — import one from the SJSU page.</Card>
             )}
           </div>
-        </section>
+        </Reveal>
       </div>
 
-      <section className="flex flex-col gap-5">
+      <Reveal as="section" className="flex flex-col gap-5">
         <SectionHeader eyebrow="Silicon Valley" title="Internships near campus" action={<LinkButton href="/internships" variant="ghost" size="sm">All internships <ArrowUpRight size={14} /></LinkButton>} />
         <JobGrid jobs={interns.jobs} empty={{ title: `No internships within ${radius} miles yet`, body: "Try a wider radius, or include remote roles on the Internships page." }} />
-      </section>
+      </Reveal>
     </div>
   );
 }

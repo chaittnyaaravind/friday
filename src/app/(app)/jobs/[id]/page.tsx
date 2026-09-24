@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AnalyzeJobButton } from "@/components/actions";
 import { ApplyPanel } from "@/components/apply-panel";
+import { Reveal, Stagger } from "@/components/motion";
 import { Card, Chip, CompanyMark, Label, Notice, cx } from "@/components/ui";
 import { getJob } from "@/lib/data/jobs";
 import { authGuidance, learnSuggestion, type Gap, type Reason } from "@/lib/domain/match";
@@ -122,7 +123,7 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
           </Card>
 
           {/* Requirements vs profile */}
-          <section className="reveal reveal-2 flex flex-col gap-4">
+          <Reveal as="section" className="flex flex-col gap-4">
             <div className="flex items-end justify-between gap-3">
               <div className="flex flex-col gap-2">
                 <Label>Requirements · your profile</Label>
@@ -151,29 +152,29 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
                 {job.is_on_campus ? "On-campus postings rarely list technical requirements — open the application for eligibility and hours." : "FRIDAY couldn't find specific skill requirements in this posting. Use “Refine with FRIDAY” to read it in full."}
               </Card>
             )}
-          </section>
+          </Reveal>
 
           {/* Learn */}
           {missing.length > 0 && (
-            <section className="reveal reveal-3 flex flex-col gap-4">
+            <Reveal as="section" className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
                 <Label>Close the gap</Label>
                 <h2 className="text-[24px]">What to learn next</h2>
               </div>
-              <div className="grid gap-2 sm:grid-cols-2">
+              <Stagger className="grid gap-2 sm:grid-cols-2">
                 {missing.slice(0, 6).map((m) => (
                   <Card key={m.label} className="flex flex-col gap-2 p-4">
                     <span className="flex items-center gap-2 text-[14px]"><AlertTriangle size={13} className="text-amber" />{m.label}</span>
                     <p className="text-[13px] leading-relaxed text-muted">{learnSuggestion(m.label)}</p>
                   </Card>
                 ))}
-              </div>
-            </section>
+              </Stagger>
+            </Reveal>
           )}
 
           {/* Description */}
           {job.description && (
-            <section className="flex flex-col gap-4">
+            <Reveal as="section" className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
                 <Label>From the posting</Label>
                 <h2 className="text-[24px]">Description</h2>
@@ -187,11 +188,11 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
                   <div className="mt-4 whitespace-pre-line text-[14px] leading-[1.7] text-muted">{job.description}</div>
                 </details>
               </Card>
-            </section>
+            </Reveal>
           )}
 
           {/* Sources */}
-          <section className="flex flex-col gap-4">
+          <Reveal as="section" className="flex flex-col gap-4">
             <Label>Where FRIDAY found this</Label>
             <Card className="divide-y-[0.5px] divide-hairline-strong">
               {sources.map((s, i) => (
@@ -204,7 +205,7 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
                 </a>
               ))}
             </Card>
-          </section>
+          </Reveal>
         </div>
 
         {/* Sticky apply rail */}

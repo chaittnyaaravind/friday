@@ -63,9 +63,12 @@ export function computeMatch(p: MatchProfile, j: MatchJob): MatchResult {
   if (req.length + pref.length === 0) {
     score += 30; // unknown requirements: neutral, not a penalty
   } else {
-    const reqRatio = req.length ? req.filter(covered).length / req.length : 1;
-    const prefRatio = pref.length ? pref.filter(covered).length / pref.length : 1;
-    score += Math.round(reqRatio * 48 + prefRatio * 12);
+    const reqRatio = req.filter(covered).length / (req.length || 1);
+    const prefRatio = pref.filter(covered).length / (pref.length || 1);
+    const coverage = req.length && pref.length ? reqRatio * 0.8 + prefRatio * 0.2 : req.length ? reqRatio : prefRatio;
+    // Few listed requirements = little evidence: pull toward neutral (0.5) instead of claiming a perfect fit.
+    const confidence = Math.min(1, (req.length + pref.length * 0.5) / 4);
+    score += Math.round(60 * (confidence * coverage + (1 - confidence) * 0.5));
   }
 
   // ── Role fit (15) ──
@@ -85,7 +88,9 @@ export function computeMatch(p: MatchProfile, j: MatchJob): MatchResult {
 
   // ── Profile (10) ──
   const technical = j.category !== null && j.category !== "Product/Technical";
-  if (p.major && CS_MAJOR.test(p.major) && technical) {
+  // Hardware/embedded roles only count as a major fit if the student shows hardware skills.
+  const hardwareOk = j.category !== "Embedded" || ["embedded", "verilog", "vhdl", "fpga", "computer-architecture", "assembly"].some((s) => have.has(s));
+  if (p.major && CS_MAJOR.test(p.major) && technical && hardwareOk) {
     strong.push({ label: `${shortMajor(p.major)} student`, kind: "profile" });
     score += 10;
   } else if (!technical || j.isOnCampus) {

@@ -150,3 +150,16 @@ describe("technical classifier regressions", () => {
     for (const t of ["Accounting Intern", "Technical Sales - Intern", "Legal Summer Intern", "Growth Marketing Intern"]) expect(classifyRole(t).isTechnical, t).toBe(false);
   });
 });
+
+describe("match confidence", () => {
+  it("a single matching skill on a hardware role is not a strong match for a CS student", () => {
+    const hw: MatchJob = { ...job, title: "Hardware Engineer II Intern", category: "Embedded", requirements: [{ slug: "python", label: "Python", kind: "required" }] };
+    const m = computeMatch(profile, hw);
+    expect(m.score).toBeLessThan(75);
+    expect(m.strong.map((r) => r.label)).not.toContain("Computer Science student");
+  });
+  it("broad coverage of many requirements still scores strong", () => {
+    const rich: MatchJob = { ...job, requirements: ["java", "python", "sql", "rest", "dsa"].map((s) => ({ slug: s, label: s, kind: "required" as const })) };
+    expect(computeMatch(profile, rich).score).toBeGreaterThanOrEqual(90);
+  });
+});
