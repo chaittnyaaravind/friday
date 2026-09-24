@@ -1,0 +1,38 @@
+import { errorResponse, HttpError } from "@/lib/api";
+import { renderDocx, renderPdf } from "@/lib/resume/export";
+import { loadProfileItems } from "@/lib/resume/profile";
+import type { ResumeDoc } from "@/lib/resume/types";
+import { validateDoc } from "@/lib/resume/validate";
+import { createSupabaseServer } from "@/lib/supabase/server";
+
+/**
+ * GET /api/resumes/versions/:id/export?format=pdf|docx — download exactly the reviewed
+ * document. Refuses (422) if anything in it isn't backed by your confirmed profile.
+ */
+export async function GET(req: Request, ctx: RouteContext<"/api/resumes/versions/[id]/export">) {
+  try {
+    const { id } = await ctx.params;
+    const format = new URL(req.url).searchParams.get("format") === "docx" ? "docx" : "pdf";
+    const db = await createSupabaseServer();
+    const { data: auth } = await db.auth.getUser();
+    if (!auth.user) return Response.json({ error: "Sign in required" }, { status: 401 });
+    const { data: v } = await db.from("resume_versions").select("label, kind, content").eq("id", id).eq("user_id", auth.user.id).maybeSingle();
+    if (!v) throw new HttpError(404, "Resume version not found");
+    if (v.kind === "legacy") throw new HttpError(409, "Legacy drafts can't be exported. Build a new version from your profile.");
+    const doc = v.content as ResumeDoc;
+    const check = validateDoc(doc, await loadProfileItems(db, auth.user.id));
+    if (!check.ok) return Response.json({ error: "Some content isn't backed by your confirmed profile. Fix or confirm it before exporting.", issues: check.issues }, { status: 422 });
+
+    const name = `${(doc.header.name || "Resume").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "_")}_${v.label.replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "_")}`.slice(0, 90);
+    const bytes = format === "pdf" ? await renderPdf(doc) : await renderDocx(doc);
+    return new Response(new Uint8Array(bytes), {
+      headers: {
+        "content-type": format === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "content-disposition": `attachment; filename="${name}.${format}"`,
+        "cache-control": "no-store",
+      },
+    });
+  } catch (e) {
+    return errorResponse(e);
+  }
+}

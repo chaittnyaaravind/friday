@@ -26,9 +26,10 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
   const detail = await getJob(db, id, user.id).catch(() => null);
   if (!detail) notFound();
   const { job, match, saved, application } = detail;
-  const [{ data: profile }, { count: resumes }] = await Promise.all([
+  const [{ data: profile }, { count: resumes }, { data: latestResume }] = await Promise.all([
     db.from("profiles").select("work_authorization").eq("id", user.id).single(),
     db.from("resumes").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+    db.from("resume_versions").select("id").eq("user_id", user.id).neq("kind", "legacy").order("updated_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
 
   const company = job.companies as { slug: string; name: string; careers_url: string | null; industry: string | null; is_sjsu: boolean };
@@ -210,7 +211,7 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
 
         {/* Sticky apply rail */}
         <aside className="flex flex-col gap-4 lg:sticky lg:top-8 lg:self-start">
-          <ApplyPanel jobId={job.id} applyUrl={job.apply_url} official={job.apply_url_is_official} saved={saved} applicationId={application?.id ?? null} hasResume={(resumes ?? 0) > 0} />
+          <ApplyPanel jobId={job.id} applyUrl={job.apply_url} official={job.apply_url_is_official} saved={saved} applicationId={application?.id ?? null} hasResume={(resumes ?? 0) > 0} latestVersionId={latestResume?.id ?? null} />
           {auth.status !== "not_applicable" && (
             <Notice tone={auth.status === "posting_restricts" ? "accent" : auth.status === "potentially_relevant" ? "moss" : "amber"} title={auth.headline}>
               {auth.detail}{" "}

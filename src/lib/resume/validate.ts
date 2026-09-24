@@ -10,19 +10,24 @@ import { isEligible, type CandidateItem, type ResumeDoc } from "./types";
 export type Issue = { where: string; text: string; claim: string; reason: string };
 
 const norm = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9%$+#.]/g, "");
-const NUM_RE = /\$?\d[\d,]*(?:\.\d+)?\s?(?:%|k\b|m\b|x\b|\+)?/gi;
+const NUM_RE = /\$?\d[\d,]*(?:\.\d+)?\s?(?:%|\+|(?:million|billion|thousand|k|m|x)\b)?/gi;
+const numbersIn = (text: string) => (text.match(NUM_RE) ?? []).map((n) => n.replace(/\s+/g, "").replace(/,/g, "").toLowerCase());
+const isNumber = (claim: string) => /^\$?\d/.test(claim);
 
 /** Claims a reviewer could check: metrics/numbers/years and named technologies. */
 export function claimsIn(text: string): string[] {
-  const nums = (text.match(NUM_RE) ?? []).map((n) => n.replace(/\s+/g, "").replace(/,/g, ""));
+  const nums = numbersIn(text);
   const tech = skillMentions(text);
   return [...new Set([...nums, ...tech])];
 }
 
 /** Claims in `text` with no support in `evidence` (used for any AI draft before saving). */
 export function unsupportedClaims(text: string, evidence: string): string[] {
+  // Numbers must appear as the same whole number ("2" is not backed by "2025");
+  // technologies may appear anywhere in the evidence text.
+  const evNums = new Set(numbersIn(evidence));
   const ev = norm(evidence.replace(/,/g, ""));
-  return claimsIn(text).filter((c) => !ev.includes(norm(c)));
+  return claimsIn(text).filter((c) => (isNumber(c) ? !evNums.has(c.toLowerCase()) : !ev.includes(norm(c))));
 }
 
 function evidenceOf(item: CandidateItem) {

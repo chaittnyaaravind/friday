@@ -2,9 +2,11 @@ import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { RunAgentButton } from "@/components/actions";
 import { JobGrid } from "@/components/job-card";
+import { ResumeSteps } from "@/components/resume/status";
 import { CountUp, Reveal, Stagger } from "@/components/motion";
 import { Card, CompanyMark, Label, LinkButton, MatchBadge, Notice, SectionHeader, cx } from "@/components/ui";
 import { searchJobs } from "@/lib/data/jobs";
+import { resumeStatus } from "@/lib/resume/profile";
 import { ago, greeting, miles, place, TYPE_LABEL } from "@/lib/format";
 import { createSupabaseServer, isAdminConfigured, requireUser } from "@/lib/supabase/server";
 
@@ -19,7 +21,7 @@ export default async function Dashboard() {
   const { data: profile } = await db.from("profiles").select("full_name, radius_miles, origin_label, work_authorization").eq("id", user.id).single();
   const radius = profile?.radius_miles ?? 25;
 
-  const [best, fresh, campus, interns, nearby, apps, interviews, follows, deadlines, lastRun, digest] = await Promise.all([
+  const [best, fresh, campus, interns, nearby, apps, interviews, follows, deadlines, lastRun, digest, resume] = await Promise.all([
     searchJobs(db, { postedWithinDays: 14, sort: "match", limit: 6 }),
     searchJobs(db, { postedWithinDays: 1, sort: "match", limit: 100 }),
     searchJobs(db, { onCampus: true, sort: "new", limit: 3 }),
@@ -31,6 +33,7 @@ export default async function Dashboard() {
     db.from("saved_jobs").select("job_id, jobs!inner(deadline)", { count: "exact", head: true }).eq("user_id", user.id).gte("jobs.deadline", now.toISOString().slice(0, 10)).lte("jobs.deadline", in7.slice(0, 10)),
     db.from("agent_runs").select("finished_at, status, stats").eq("kind", "discovery").not("finished_at", "is", null).order("finished_at", { ascending: false }).limit(1).maybeSingle(),
     db.from("notifications").select("title, body").eq("user_id", user.id).eq("kind", "digest").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    resumeStatus(db, user.id),
   ]);
 
   const newMatches = fresh.jobs.filter((j) => j.is_on_campus || (j.score ?? 0) >= 55).length;
@@ -87,6 +90,18 @@ export default async function Dashboard() {
           </Link>
         ))}
       </Stagger>
+
+      <Reveal>
+        <Card className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-3">
+            <Label>Resume status</Label>
+            <ResumeSteps status={resume} className="md:flex-row md:flex-wrap md:gap-x-6" />
+          </div>
+          <LinkButton href={resume.needsConfirmation || (resume.extracted && !resume.reviewed) ? "/resume/review" : "/resume"} size="sm" variant={resume.needsConfirmation ? "primary" : "secondary"}>
+            {resume.needsConfirmation ? "Review now" : resume.uploaded ? "Open resumes" : "Upload resume"}
+          </LinkButton>
+        </Card>
+      </Reveal>
 
       <Reveal as="section" className="flex flex-col gap-5">
         <SectionHeader eyebrow="Ranked for you" title="Best new opportunities" action={<LinkButton href="/discover" variant="ghost" size="sm">See all <ArrowUpRight size={14} /></LinkButton>} />

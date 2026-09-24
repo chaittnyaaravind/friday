@@ -2,8 +2,9 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { errorResponse } from "@/lib/api";
 import { claude, FALLBACK_BETA, friendlyAiError, MODEL } from "@/lib/ai/client";
-import { tailorResume, ParsedResume } from "@/lib/ai/tasks";
 import { searchJobs } from "@/lib/data/jobs";
+import { loadProfileItems } from "@/lib/resume/profile";
+import { tailorProposal } from "@/lib/resume/tailor";
 import { authGuidance, ISSS_NOTICE } from "@/lib/domain/match";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
@@ -85,17 +86,15 @@ const TOOLS: Tool[] = [
     const { data: m } = await db.from("job_matches").select("missing, strong").eq("job_id", job_id).eq("user_id", userId).maybeSingle();
     return { missing: m?.missing ?? [], already_strong: m?.strong ?? [] };
   }),
-  def("tailor_resume", "Create a tailored DRAFT of the user's primary resume for one opportunity. Never adds experience; saved as a new version the user reviews.", z.object({ job_id: z.string() }), async (db, userId, { job_id }) => {
-    const [{ data: resume }, { data: job }] = await Promise.all([
-      db.from("resumes").select("id, parsed").eq("user_id", userId).eq("is_primary", true).maybeSingle(),
-      db.from("jobs").select("id, title, description, companies(name)").eq("id", job_id).maybeSingle(),
+  def("tailor_resume", "Compare the user's CONFIRMED profile with one opportunity (no AI): matched skills, missing skills (never added), relevant experience, and a link to review and create the tailored resume.", z.object({ job_id: z.string() }), async (db, userId, { job_id }) => {
+    const [items, { data: job }] = await Promise.all([
+      loadProfileItems(db, userId),
+      db.from("jobs").select("id, title, description, companies(name), job_requirements(label)").eq("id", job_id).maybeSingle(),
     ]);
-    if (!resume?.parsed) return { error: "Upload a resume on the Resume page first." };
-    if (!job?.description) return { error: "This listing has no description to tailor against." };
-    const company = (job.companies as unknown as { name: string } | null)?.name ?? "";
-    const tailored = await tailorResume(ParsedResume.parse(resume.parsed), { title: job.title, company, description: job.description });
-    const { data: v } = await db.from("resume_versions").insert({ user_id: userId, resume_id: resume.id, job_id, label: `${company} — ${job.title}`.slice(0, 160), content: { tailored } }).select("id").single();
-    return { saved_version_link: `/resume?version=${v?.id}`, changes: tailored.changes, suggestions: tailored.suggestions };
+    if (!job) return { error: "Opportunity not found." };
+    if (!items.length) return { error: "Upload a resume on the Resume page first." };
+    const p = tailorProposal(items, { id: job.id, title: job.title, company: (job.companies as unknown as { name: string } | null)?.name ?? "", description: job.description ?? "", requirements: ((job.job_requirements as { label: string }[]) ?? []).map((r) => r.label) });
+    return { review_and_create_link: `/resume/tailor/${job.id}`, matched: p.skills.filter((s) => s.status === "confirmed").map((s) => s.name), not_in_profile: p.skills.filter((s) => s.status === "not_in_profile").map((s) => s.name), relevant_experience: p.relevant.experience.map((r) => r.label), proposed_changes: p.changes.reorder };
   }),
 ];
 

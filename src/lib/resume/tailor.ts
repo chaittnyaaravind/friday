@@ -5,16 +5,16 @@
  */
 import { extractSkills, resolveSkill, skillBySlug } from "@/lib/domain/skills";
 import { buildResume, normalizeSentence, type BuildOptions } from "./generate";
-import { isEligible, type CandidateItem, type ExperienceData, type ProjectData, type ResumeDoc, type SkillData, type TextData } from "./types";
+import { isEligible, SECTION_LABEL, type CandidateItem, type ExperienceData, type ProjectData, type ResumeDoc, type SkillData, type TextData } from "./types";
 
 export type TailorJob = { id: string; title: string; company: string; description: string; requirements: string[] };
 
 export type TailorProposal = {
   job: { id: string; title: string; company: string };
-  skills: { name: string; status: "confirmed" | "not_in_profile"; yours?: string }[];
+  skills: { name: string; status: "confirmed" | "not_in_profile"; yours?: string; mentionedIn?: string }[];
   relevant: { experience: Ranked[]; projects: Ranked[]; coursework: string[] };
   changes: {
-    keep: string[];
+    keep: { id: string; label: string }[];
     reorder: string[];
     wording: { before: string; after: string }[];
     notIncluded: { id: string; label: string; reason: string }[];
@@ -39,6 +39,14 @@ export function tailorProposal(allItems: CandidateItem[], job: TailorJob): Tailo
     return have ? { name: skillBySlug(slug)?.name ?? slug, status: "confirmed" as const, yours: have.name } : { name: skillBySlug(slug)?.name ?? slug, status: "not_in_profile" as const };
   });
   skills.sort((a, b) => (a.status === b.status ? 0 : a.status === "confirmed" ? -1 : 1));
+  // A missing skill may still be named elsewhere (e.g. "AWS" in a certification). Say where,
+  // but never promote it to a skill — only the user can confirm that.
+  for (const sk of skills) {
+    if (sk.status !== "not_in_profile") continue;
+    const slug = [...jobSlugs].find((j) => (skillBySlug(j)?.name ?? j) === sk.name);
+    const where = items.find((i) => i.section !== "skill" && slug && extractSkills(JSON.stringify(i.data)).includes(slug));
+    if (where) sk.mentionedIn = SECTION_LABEL[where.section];
+  }
 
   const rankOf = (text: string) => {
     const matches = extractSkills(text).filter((s) => jobSlugs.has(s)).map((s) => skillBySlug(s)?.name ?? s);
@@ -81,8 +89,10 @@ export function tailorProposal(allItems: CandidateItem[], job: TailorJob): Tailo
     .filter((a) => a.score === 0 && /high school/i.test(entryText(items.find((i) => i.id === a.id)!)))
     .map((a) => ({ id: a.id, label: a.label, reason: "High-school activity with no connection to this role" }));
 
-  const keep = [...exp, ...proj].filter((r) => !notIncluded.some((n) => n.id === r.id)).map((r) => r.label);
-  const needsConfirmation = skills.filter((s) => s.status === "not_in_profile").map((s) => `${s.name} appears in the job requirements but is not in your profile`);
+  const keep = [...exp, ...proj].filter((r) => !notIncluded.some((n) => n.id === r.id)).map((r) => ({ id: r.id, label: r.label }));
+  const needsConfirmation = skills
+    .filter((s) => s.status === "not_in_profile")
+    .map((s) => (s.mentionedIn ? `${s.name} is required — it's mentioned in your ${s.mentionedIn}, but isn't a confirmed skill` : `${s.name} appears in the job requirements but is not in your profile`));
 
   return {
     job: { id: job.id, title: job.title, company: job.company },

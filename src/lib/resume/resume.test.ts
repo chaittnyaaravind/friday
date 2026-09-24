@@ -93,7 +93,7 @@ describe("tailoring", () => {
   it("3. a job requirement is never added to the user's skills", () => {
     const p = tailorProposal(items, job);
     expect(p.skills.find((s) => s.name === "AWS")?.status).toBe("not_in_profile");
-    expect(p.changes.needsConfirmation.join(" ")).toContain("AWS appears in the job requirements but is not in your profile");
+    expect(p.changes.needsConfirmation.join(" ")).toContain("AWS is required — it's mentioned in your Certifications, but isn't a confirmed skill");
     const doc = buildTailored(items, p, []);
     expect(skillNames(doc)).not.toContain("AWS");
     expect(p.skills.find((s) => s.name === "Python")?.status).toBe("confirmed");
@@ -174,5 +174,35 @@ describe("export + no-AI", () => {
     const docWords = new Set(tok(docToText(doc)));
     const extra = tok(pdf).filter((w) => !docWords.has(w));
     expect(extra).toEqual([]);
+  });
+});
+
+describe("version compare", () => {
+  it("diffs lines without losing or inventing any", async () => {
+    const { diffLines } = await import("./diff");
+    const d = diffLines(["a", "b", "c"], ["a", "c", "d"]);
+    expect(d).toEqual([{ kind: "same", text: "a" }, { kind: "removed", text: "b" }, { kind: "same", text: "c" }, { kind: "added", text: "d" }]);
+  });
+});
+
+describe("numeric claims match whole numbers", () => {
+  it("does not treat '2' as backed by '2025' and keeps magnitude words", async () => {
+    const { unsupportedClaims } = await import("./validate");
+    expect(unsupportedClaims("Served 2 million users", "Jun 2025 – Aug 2025 intern")).toEqual(["2million"]);
+    expect(unsupportedClaims("GPA: 3.62", '{"gpa":"3.62"}')).toEqual([]);
+    expect(unsupportedClaims("Helped 20+ students", "Helped 20+ students weekly")).toEqual([]);
+  });
+});
+
+describe("tailoring never promotes a skill from elsewhere", () => {
+  it("notes AWS in a certification but keeps it out of skills", async () => {
+    const { tailorProposal, buildTailored } = await import("./tailor");
+    const p = tailorProposal(items, { id: "j", title: "Cloud Intern", company: "X", description: "Experience with AWS and Java required.", requirements: ["AWS", "Java"] });
+    const aws = p.skills.find((s) => s.name === "AWS");
+    expect(aws?.status).toBe("not_in_profile");
+    expect(aws?.mentionedIn).toBe("Certifications");
+    const doc = buildTailored(items, p, []);
+    const skills = doc.sections.find((s) => s.kind === "skills")!.lines.map((l) => l.text).join(" ");
+    expect(skills).not.toMatch(/\bAWS\b/);
   });
 });

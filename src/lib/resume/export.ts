@@ -70,8 +70,8 @@ export async function renderPdf(doc: ResumeDoc): Promise<Uint8Array> {
     draw(doc.header.name, (PAGE.w - width(bold, doc.header.name, 19)) / 2, 19, bold);
     y -= 17;
   }
-  if (doc.header.contact.length) {
-    for (const l of wrap(doc.header.contact.join("  |  "), reg, 9.5, W)) {
+  if (doc.header.contact.some((c) => c.trim())) {
+    for (const l of wrap(doc.header.contact.filter((c) => c.trim()).join("  |  "), reg, 9.5, W)) {
       need(12);
       draw(l, (PAGE.w - width(reg, l, 9.5)) / 2, 9.5, reg, SOFT);
       y -= 12;
@@ -133,7 +133,7 @@ export async function renderDocx(doc: ResumeDoc): Promise<Buffer> {
   const RIGHT = [{ type: TabStopType.RIGHT, position: 10080 }];
   const kids: Paragraph[] = [];
   if (doc.header.name) kids.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 40 }, children: [run(doc.header.name, { bold: true, size: 36 })] }));
-  if (doc.header.contact.length) kids.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 160 }, children: [run(doc.header.contact.join(" | "), { size: 18, color: "444444" })] }));
+  if (doc.header.contact.some((c) => c.trim())) kids.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 160 }, children: [run(doc.header.contact.filter((c) => c.trim()).join(" | "), { size: 18, color: "444444" })] }));
   for (const s of doc.sections) {
     kids.push(new Paragraph({
       spacing: { before: 160, after: 80 },
