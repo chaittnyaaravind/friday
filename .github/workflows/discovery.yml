@@ -1,0 +1,33 @@
+name: Discover new opportunities
+
+# Vercel Hobby crons run once a day. This calls the same endpoint every 3 hours so new
+# internships and SJSU postings show up (and notify matching students) within hours.
+on:
+  schedule:
+    - cron: "17 */3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: discovery
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Run discovery
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          test -n "$SITE_URL" && test -n "$CRON_SECRET"
+          code=$(curl -sS --retry 2 --retry-delay 15 --max-time 300 -o report.json -w "%{http_code}" \
+            -H "Authorization: Bearer $CRON_SECRET" "$SITE_URL/api/agent/cron")
+          echo "HTTP $code"
+          # Summary only: counts, never job text.
+          jq '{companies, seen, kept, created, closed, newJobs, failures: (.failures | length)}' report.json
+          test "$code" = "200"
