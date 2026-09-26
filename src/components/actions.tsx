@@ -1,6 +1,7 @@
 "use client";
 
 import { Bookmark, BookmarkCheck, Check, Loader2, Plus, RefreshCw, Sparkles } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Button, Field, Input, Select, Textarea, cx } from "./ui";
@@ -171,12 +172,12 @@ export function AnalyzeJobButton({ jobId }: { jobId: string }) {
 }
 
 /** Paste a listing from Handshake / LinkedIn / Indeed. FRIDAY never logs into those sites. */
-export function ImportDialog({ defaultSource = "handshake", onCampus = false, trigger = "Import a listing" }: { defaultSource?: "handshake" | "linkedin" | "indeed" | "other"; onCampus?: boolean; trigger?: string }) {
+export function ImportDialog({ defaultSource = "handshake", onCampus = false, trigger = "Import a listing", initial, defaultOpen = false }: { defaultSource?: "handshake" | "linkedin" | "indeed" | "other"; onCampus?: boolean; trigger?: string; initial?: Partial<{ url: string; title: string; company: string; location: string; description: string; source: "handshake" | "linkedin" | "indeed" | "other" }>; defaultOpen?: boolean }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [f, setF] = useState({ url: "", title: "", company: onCampus ? "SJSU" : "", location: onCampus ? "San Jose, CA" : "", description: "", pay: "", deadline: "", source: defaultSource });
+  const [f, setF] = useState({ url: "", title: "", company: onCampus ? "SJSU" : "", location: onCampus ? "San Jose, CA" : "", description: "", pay: "", deadline: "", source: defaultSource, ...initial });
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
 
   return (
@@ -211,7 +212,7 @@ export function ImportDialog({ defaultSource = "handshake", onCampus = false, tr
               <span className="label">Import</span>
               <h3 className="text-[22px]">Bring in a listing</h3>
               <p className="text-[13px] leading-relaxed text-muted">
-                Paste a posting from Handshake, LinkedIn, Indeed, or anywhere. FRIDAY deduplicates it against everything it already found and keeps the official apply link when one exists. FRIDAY never signs in to those sites for you.
+                Paste a posting from Handshake, LinkedIn, Indeed, or anywhere. FRIDAY deduplicates it against everything it already found and keeps the official apply link when one exists. FRIDAY never signs in to those sites for you. <Link href="/import" className="text-accent underline-offset-2 hover:underline">Install the one-click bookmarklet</Link> to skip the copying.
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
