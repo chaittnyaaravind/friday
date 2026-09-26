@@ -81,7 +81,13 @@ export const SECTION_LABEL: Record<Section, string> = {
 /** Where a line of resume text came from. `profile` text is validated against the profile. */
 export type Origin = "profile" | "user" | "ai";
 
-export type DocLine = { id: string; text: string; origin: Origin; sourceItemId: string | null };
+/**
+ * Trace of an accepted AI rewrite. `basis` is the text the AI was allowed to draw on (the
+ * line it rewrote, its entry, the profile item) — the validator checks the AI line against it.
+ */
+export type AiTrace = { basis: string; op: string; at: string; /** server signature over (user, text, basis) — see lib/ai/sign.ts */ sig?: string };
+
+export type DocLine = { id: string; text: string; origin: Origin; sourceItemId: string | null; ai?: AiTrace };
 
 export type DocEntry = {
   id: string;

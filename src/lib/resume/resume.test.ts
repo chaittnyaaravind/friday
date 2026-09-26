@@ -143,9 +143,9 @@ describe("truth layer", () => {
 });
 
 describe("export + no-AI", () => {
-  it("7. the resume system works with no Anthropic key and never imports the AI client", async () => {
-    const key = process.env.ANTHROPIC_API_KEY;
-    delete process.env.ANTHROPIC_API_KEY;
+  it("7. the resume system works with no AI key and never imports the AI client", async () => {
+    const key = process.env.GROQ_API_KEY;
+    delete process.env.GROQ_API_KEY;
     try {
       const doc = buildResume(toItems(parseResumeText(pdfText).facts));
       expect((await renderPdf(doc)).byteLength).toBeGreaterThan(1000);
@@ -153,7 +153,7 @@ describe("export + no-AI", () => {
         expect(readFileSync(`src/lib/resume/${f}.ts`, "utf8")).not.toMatch(/@\/lib\/ai|@anthropic-ai/);
       }
     } finally {
-      if (key) process.env.ANTHROPIC_API_KEY = key;
+      if (key) process.env.GROQ_API_KEY = key;
     }
   });
 

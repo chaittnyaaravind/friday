@@ -4,8 +4,9 @@
  * technologies, and entry headings (employer, school, project) — are compared against the
  * source fact. Anything unsupported is reported and blocks export.
  */
+import { newFactsIn, skillsLineFacts } from "./guard";
 import { skillMentions } from "./parse";
-import { isEligible, type CandidateItem, type ResumeDoc } from "./types";
+import { isEligible, type CandidateItem, type DocLine, type ResumeDoc } from "./types";
 
 export type Issue = { where: string; text: string; claim: string; reason: string };
 
@@ -53,6 +54,18 @@ export function validateDoc(doc: ResumeDoc, items: CandidateItem[]): { ok: boole
     for (const c of unsupportedClaims(text, evidence)) issues.push({ where, text, claim: c, reason: "No supporting evidence found in your profile." });
   };
 
+  // An accepted AI rewrite is checked against the text it was allowed to draw on (its recorded
+  // basis + the profile item behind it). Any fact it adds that neither supports is an issue.
+  const checkAi = (where: string, l: DocLine, entrySourceId: string | null, skills: boolean) => {
+    if (!l.text.trim()) return;
+    const sourceId = l.sourceItemId ?? entrySourceId;
+    const item = sourceId ? byId.get(sourceId) : undefined;
+    const evidence = `${l.ai?.basis ?? ""}\n${item && isEligible(item) ? evidenceOf(item) : ""}`;
+    if (!l.ai?.basis && !(item && isEligible(item))) return issues.push({ where, text: l.text, claim: l.text, reason: "AI-written line has no recorded source." });
+    const facts = skills ? skillsLineFacts(evidence, l.text) : newFactsIn(l.text, evidence);
+    for (const f of facts) issues.push({ where, text: l.text, claim: f.claim, reason: f.reason });
+  };
+
   if (doc.header.origin !== "user") {
     const ev = norm(allEvidence);
     for (const c of doc.header.contact) if (!ev.includes(norm(c.replace(/^https?:\/\/(www\.)?/, "")))) issues.push({ where: "Header", text: c, claim: c, reason: "Not found in your profile." });
@@ -75,10 +88,17 @@ export function validateDoc(doc: ResumeDoc, items: CandidateItem[]): { ok: boole
           check(s.title, e.meta, e.sourceItemId);
         }
       }
-      for (const b of e.bullets) if (b.origin !== "user") check(`${s.title} · ${e.heading}`, b.text, b.sourceItemId ?? e.sourceItemId);
+      for (const b of e.bullets) {
+        if (b.origin === "ai") checkAi(`${s.title} · ${e.heading}`, b, e.sourceItemId, false);
+        else if (b.origin !== "user") check(`${s.title} · ${e.heading}`, b.text, b.sourceItemId ?? e.sourceItemId);
+      }
     }
     for (const l of s.lines) {
       if (l.origin === "user") continue;
+      if (l.origin === "ai") {
+        checkAi(s.title, l, null, s.kind === "skills");
+        continue;
+      }
       if (s.kind === "skills") {
         for (const token of l.text.replace(/^[^:]{1,40}:\s*/, "").split(/\s*,\s*/)) {
           if (token && !skillNames.has(norm(token))) issues.push({ where: "Skills", text: l.text, claim: token, reason: "Not a confirmed skill in your profile." });

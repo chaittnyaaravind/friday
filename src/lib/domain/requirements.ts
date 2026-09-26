@@ -1,7 +1,7 @@
 /**
  * Deterministic requirement extraction from a job description. Splits the text into
  * "required" and "preferred" sections by their headings, then maps each section to
- * taxonomy skills. Claude can refine this later (POST /api/agent/analyze-job), but
+ * taxonomy skills. the AI can refine this later (POST /api/agent/analyze-job), but
  * the feed never waits on a model call.
  */
 import { extractSkills } from "./skills";
