@@ -6,7 +6,7 @@ import { resolveSkill, skillBySlug } from "@/lib/domain/skills";
 import { createSupabaseAdmin } from "@/lib/supabase/server";
 
 /**
- * POST /api/agent/analyze-job — Claude reads the full posting and refines its
+ * POST /api/agent/analyze-job — the AI reads the full posting and refines its
  * requirements (required vs preferred), replacing the keyword-based extraction.
  * Requirements that don't map to a known skill are kept as plain labels.
  */

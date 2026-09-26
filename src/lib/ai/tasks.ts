@@ -1,33 +1,54 @@
 /**
- * Optional Claude tasks (job analysis, cover letters). Every output is schema-validated.
+ * Optional AI tasks (job analysis, cover letters) on a free LLM provider (see ./client).
+ * Every output is JSON-mode and schema-validated with one repair retry.
  * The resume system does NOT use these — parsing, building and tailoring are local and
- * deterministic (src/lib/resume), so they keep working with zero API credits.
+ * deterministic (src/lib/resume), so they keep working with no AI at all.
  */
 import "server-only";
-import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
-import { AiRefusalError, claude, FALLBACK_BETA, MODEL } from "./client";
+import { cached } from "./cache";
+import { AiMalformedError, complete } from "./client";
+import type { AiTask } from "./routing";
 
-async function structured<T extends z.ZodType>(opts: {
+/** The JSON object in a model reply: as-is, unfenced, or the first `{` … last `}` if it added prose around it. */
+export function extractJson(reply: string): unknown {
+  const text = reply.replace(/^```(?:json)?\s*|\s*```$/g, "").trim();
+  try {
+    return JSON.parse(text);
+  } catch {
+    const a = text.indexOf("{"), b = text.lastIndexOf("}");
+    if (a >= 0 && b > a) return JSON.parse(text.slice(a, b + 1));
+    throw new SyntaxError("no JSON object");
+  }
+}
+
+/**
+ * JSON completion validated against a zod schema, with one repair retry. Shared by the resume editor.
+ * The repair attempt goes to a DIFFERENT provider when one is available: a model that just returned
+ * an unreadable answer is the wrong place to ask again.
+ */
+export async function structured<T extends z.ZodType>(opts: {
   schema: T;
   system: string;
   user: string;
-  effort?: "low" | "medium" | "high";
   maxTokens?: number;
+  task?: AiTask;
 }): Promise<z.infer<T>> {
-  const res = await claude().beta.messages.parse({
-    model: MODEL,
-    max_tokens: opts.maxTokens ?? 16000,
-    betas: [FALLBACK_BETA],
-    fallbacks: "default",
-    thinking: { type: "adaptive" },
-    output_config: { effort: opts.effort ?? "medium", format: betaZodOutputFormat(opts.schema) },
-    system: opts.system,
-    messages: [{ role: "user", content: opts.user }],
-  });
-  if (res.stop_reason === "refusal") throw new AiRefusalError(res.stop_details?.category ?? null);
-  if (!res.parsed_output) throw new Error(res.stop_reason === "max_tokens" ? "Claude's answer was cut off — try a shorter document." : "Claude returned an unreadable answer.");
-  return res.parsed_output as z.infer<T>;
+  const system = `${opts.system}\n\nReply with ONE JSON object only, no prose or code fences, matching this JSON Schema:\n${JSON.stringify(z.toJSONSchema(opts.schema))}`;
+  let feedback = "";
+  const skip: string[] = [];
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const res = await complete({ task: opts.task, skipProviders: skip, json: true, maxTokens: opts.maxTokens ?? 2048, messages: [{ role: "system", content: system }, { role: "user", content: opts.user + feedback }] });
+    skip.push(res.provider);
+    try {
+      const parsed = opts.schema.safeParse(extractJson(res.content ?? ""));
+      if (parsed.success) return parsed.data;
+      feedback = `\n\nYour previous reply did not match the schema: ${parsed.error.message.slice(0, 400)}. Return corrected JSON.`;
+    } catch {
+      feedback = "\n\nYour previous reply was not valid JSON. Return only a valid JSON object.";
+    }
+  }
+  throw new AiMalformedError();
 }
 
 // ───────────────────────── Job analysis ─────────────────────────
@@ -43,14 +64,16 @@ export const JobAnalysis = z.object({
 });
 export type JobAnalysis = z.infer<typeof JobAnalysis>;
 
+/** Cached for 30 minutes per posting: the same description is analyzed once, however many times it's opened. */
 export async function analyzeJob(title: string, company: string, description: string): Promise<JobAnalysis> {
-  return structured({
+  const user = `<title>${title}</title>\n<company>${company}</company>\n<posting>\n${description.slice(0, 40_000)}\n</posting>`;
+  return cached({ op: "job-analysis", user }, () => structured({
     schema: JobAnalysis,
-    effort: "low",
+    task: "job_matching",
     system:
       "You read job postings for a student career assistant. Extract only what the posting states. Skills must be specific and short (a technology, language, framework, or CS concept) — not soft skills or vague phrases. Do not guess.",
-    user: `<title>${title}</title>\n<company>${company}</company>\n<posting>\n${description.slice(0, 40_000)}\n</posting>`,
-  });
+    user,
+  }));
 }
 
 // ───────────────────────── Cover letter ─────────────────────────
@@ -60,7 +83,7 @@ export const CoverLetter = z.object({ letter: z.string(), grounded_in: z.array(z
 export async function writeCoverLetter(resume: unknown, job: { title: string; company: string; description: string }, name: string | null) {
   return structured({
     schema: CoverLetter,
-    effort: "medium",
+    task: "resume_rewrite",
     system:
       "You write a concise, specific cover letter (under 280 words) for a student. Use only facts from <resume>. No invented experience, metrics, or enthusiasm clichés ('I am thrilled', 'passionate'). Plain, confident, human. Sign with the student's name if provided.",
     user: `<resume>\n${JSON.stringify(resume)}\n</resume>\n<student_name>${name ?? ""}</student_name>\n<job title="${job.title}" company="${job.company}">\n${job.description.slice(0, 20_000)}\n</job>`,

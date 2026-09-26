@@ -198,8 +198,8 @@ async function applications(db: SupabaseClient, userId: string): Promise<LocalAn
 
 async function followUps(db: SupabaseClient, userId: string): Promise<LocalAnswer> {
   const [{ data: f }, { data: iv }] = await Promise.all([
-    db.from("follow_ups").select("due_at, note, applications(company_name, job_title)").eq("user_id", userId).is("done_at", null).order("due_at").limit(10),
-    db.from("interviews").select("scheduled_at, kind, applications(company_name, job_title)").eq("user_id", userId).gte("scheduled_at", new Date().toISOString()).order("scheduled_at").limit(5),
+    db.from("follow_ups").select("due_at, note, applications!follow_ups_parent_owner_fk(company_name, job_title)").eq("user_id", userId).is("done_at", null).order("due_at").limit(10),
+    db.from("interviews").select("scheduled_at, kind, applications!interviews_parent_owner_fk(company_name, job_title)").eq("user_id", userId).gte("scheduled_at", new Date().toISOString()).order("scheduled_at").limit(5),
   ]);
   const app = (a: unknown) => a as { company_name: string; job_title: string } | null;
   if (!f?.length && !iv?.length) return { tools: ["list_follow_ups"], text: "Nothing is waiting on you — no open follow-ups or upcoming interviews. [Open your tracker →](/applications)" };

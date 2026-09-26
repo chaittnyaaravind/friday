@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { cx } from "./ui";
 
-type Msg = { role: "user" | "assistant"; content: string; mode?: "claude" | "local" };
+type Msg = { role: "user" | "assistant"; content: string; mode?: "ai" | "local" };
 
 const PROMPTS = [
   "Find me SJSU jobs posted this week.",
@@ -87,7 +87,7 @@ export function Chat({ claude }: { claude: boolean }) {
               <h1 className="text-[38px] leading-[1.02] md:text-[54px]">What are we <span className="serif-em">hunting</span> for?</h1>
               <p className="max-w-[52ch] text-[15px] text-muted">Ask about jobs, your matches, what to learn, or your applications. FRIDAY answers from verified listings and your own tracker — it never invents a job or submits anything for you.</p>
             </div>
-            <p className="flex items-center gap-2 text-[12.5px] text-dim"><span className={cx("size-1.5 rounded-full", claude ? "bg-moss" : "bg-accent")} />{claude ? "Uses Claude when it's available; otherwise FRIDAY Local answers straight from your data." : "Running on FRIDAY Local — answers come straight from your data, no AI credits needed."}</p>
+            <p className="flex items-center gap-2 text-[12.5px] text-dim"><span className={cx("size-1.5 rounded-full", claude ? "bg-moss" : "bg-accent")} />{claude ? "Uses a free AI model when it's available; otherwise FRIDAY Local answers straight from your data." : "Running on FRIDAY Local — answers come straight from your data, no AI account needed."}</p>
             <div className="grid gap-2 sm:grid-cols-2">
               {PROMPTS.map((p) => (
                 <button key={p} onClick={() => send(p)} className="card card-hover p-4 text-left text-[14px] text-muted hover:text-text disabled:opacity-50">{p}</button>

@@ -288,7 +288,7 @@ export async function raiseReminders(db: SupabaseClient) {
 
   const { data: follows } = await db
     .from("follow_ups")
-    .select("id, user_id, application_id, due_at, note, applications(company_name, job_title)")
+    .select("id, user_id, application_id, due_at, note, applications!follow_ups_parent_owner_fk(company_name, job_title)")
     .is("done_at", null)
     .lte("due_at", tomorrowEnd);
   const followNotes = (follows ?? []).map((f) => {
@@ -298,7 +298,7 @@ export async function raiseReminders(db: SupabaseClient) {
 
   const { data: interviews } = await db
     .from("interviews")
-    .select("id, user_id, application_id, scheduled_at, kind, applications(company_name, job_title)")
+    .select("id, user_id, application_id, scheduled_at, kind, applications!interviews_parent_owner_fk(company_name, job_title)")
     .gte("scheduled_at", now.toISOString())
     .lte("scheduled_at", tomorrowEnd);
   const interviewNotes = (interviews ?? []).map((i) => {

@@ -1,7 +1,6 @@
-import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { errorResponse } from "@/lib/api";
-import { claude, FALLBACK_BETA, friendlyAiError, isAiConfigured, isAiUnavailable, MODEL } from "@/lib/ai/client";
+import { complete, friendlyAiError, isAiConfigured, isAiUnavailable, type ChatMessage, type ToolSpec } from "@/lib/ai/client";
 import { answerLocally } from "@/lib/chat/local";
 import { searchJobs } from "@/lib/data/jobs";
 import { loadProfileItems } from "@/lib/resume/profile";
@@ -12,13 +11,12 @@ import { createSupabaseServer } from "@/lib/supabase/server";
 export const maxDuration = 120;
 
 type Db = Awaited<ReturnType<typeof createSupabaseServer>>;
-type Tool = Anthropic.Beta.BetaTool & { schema: z.ZodType; run: (db: Db, userId: string, input: never) => Promise<unknown> };
+type Tool = { name: string; description: string; input_schema: unknown; schema: z.ZodType; run: (db: Db, userId: string, input: never) => Promise<unknown> };
 
 const def = <S extends z.ZodObject>(name: string, description: string, schema: S, run: (db: Db, userId: string, input: z.infer<S>) => Promise<unknown>): Tool => ({
   name,
   description,
-  input_schema: z.toJSONSchema(schema) as Anthropic.Beta.BetaTool.InputSchema,
-  eager_input_streaming: true,
+  input_schema: z.toJSONSchema(schema),
   schema,
   run: run as Tool["run"],
 });
@@ -74,8 +72,8 @@ const TOOLS: Tool[] = [
   }),
   def("list_follow_ups", "Open follow-ups and upcoming interviews, soonest first.", z.object({}), async (db, userId) => {
     const [{ data: f }, { data: i }] = await Promise.all([
-      db.from("follow_ups").select("due_at, note, applications(company_name, job_title, status)").eq("user_id", userId).is("done_at", null).order("due_at").limit(20),
-      db.from("interviews").select("scheduled_at, kind, applications(company_name, job_title)").eq("user_id", userId).gte("scheduled_at", new Date().toISOString()).order("scheduled_at").limit(10),
+      db.from("follow_ups").select("due_at, note, applications!follow_ups_parent_owner_fk(company_name, job_title, status)").eq("user_id", userId).is("done_at", null).order("due_at").limit(20),
+      db.from("interviews").select("scheduled_at, kind, applications!interviews_parent_owner_fk(company_name, job_title)").eq("user_id", userId).gte("scheduled_at", new Date().toISOString()).order("scheduled_at").limit(10),
     ]);
     return { follow_ups: f, interviews: i };
   }),
@@ -117,15 +115,16 @@ How you work:
 }
 
 /**
- * Which engine answers: FRIDAY_CHAT_ENGINE = "auto" (default) | "local" | "claude".
- * In auto mode Claude is used when it works; if it's unconfigured or unavailable (no key,
- * no credits, outage) FRIDAY Local answers instead and Claude is skipped for 10 minutes.
+ * Which engine answers: FRIDAY_CHAT_ENGINE = "auto" (default) | "local" | "ai".
+ * In auto mode the free LLM provider (see lib/ai/client) is used when it works; if it's
+ * unconfigured or unavailable (no key, rate limit, outage) FRIDAY Local answers instead and
+ * the provider is skipped for 10 minutes.
  */
 const ENGINE = (process.env.FRIDAY_CHAT_ENGINE ?? "auto").toLowerCase();
-const RETRY_CLAUDE_MS = 10 * 60_000;
-let claudeDownUntil = 0;
+const RETRY_AI_MS = 10 * 60_000;
+let aiDownUntil = 0;
 
-const wantsClaude = () => ENGINE !== "local" && isAiConfigured() && (ENGINE === "claude" || Date.now() >= claudeDownUntil);
+const wantsAi = () => ENGINE !== "local" && isAiConfigured() && (ENGINE === "ai" || Date.now() >= aiDownUntil);
 
 /** POST /api/chat — FRIDAY assistant, streamed as SSE: `data: {"type":"mode"|"text"|"tool"|"done"|"error", ...}` */
 export async function POST(req: Request) {
@@ -151,16 +150,16 @@ export async function POST(req: Request) {
       const send = (obj: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
       let sentText = false;
       try {
-        if (wantsClaude()) {
+        if (wantsAi()) {
           try {
-            send({ type: "mode", mode: "claude" });
-            await runClaude(db, userId, sys, history, (t) => { sentText = true; send({ type: "text", text: t }); }, (name) => send({ type: "tool", name }));
+            send({ type: "mode", mode: "ai" });
+            await runAi(db, userId, sys, history, (t) => { sentText = true; send({ type: "text", text: t }); }, (name) => send({ type: "tool", name }));
             send({ type: "done" });
             return;
           } catch (e) {
-            // Mid-answer failures are reported; a Claude that can't be reached hands over to Local.
-            if (sentText || !isAiUnavailable(e) || ENGINE === "claude") throw e;
-            claudeDownUntil = Date.now() + RETRY_CLAUDE_MS;
+            // Mid-answer failures are reported; a provider that can't be reached hands over to Local.
+            if (sentText || !isAiUnavailable(e) || ENGINE === "ai") throw e;
+            aiDownUntil = Date.now() + RETRY_AI_MS;
           }
         }
         send({ type: "mode", mode: "local" });
@@ -178,47 +177,29 @@ export async function POST(req: Request) {
   return new Response(stream, { headers: { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-cache, no-transform", connection: "keep-alive" } });
 }
 
-/** Claude tool-use loop. Throws before any text if Claude is unreachable. */
-async function runClaude(db: Db, userId: string, sys: string, history: z.infer<typeof Body>["messages"], onText: (t: string) => void, onTool: (name: string) => void) {
-  const messages: Anthropic.Beta.BetaMessageParam[] = history.map((m) => ({ role: m.role, content: m.content }));
+/** Tool-use loop over an OpenAI-compatible provider. Throws before any text if the provider is unreachable. */
+async function runAi(db: Db, userId: string, sys: string, history: z.infer<typeof Body>["messages"], onText: (t: string) => void, onTool: (name: string) => void) {
+  const messages: ChatMessage[] = [{ role: "system", content: sys }, ...history];
+  const tools: ToolSpec[] = TOOLS.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.input_schema } }));
   for (let turn = 0; turn < 6; turn++) {
-    const s = claude().beta.messages.stream({
-      model: MODEL,
-      max_tokens: 16000,
-      betas: [FALLBACK_BETA],
-      fallbacks: "default",
-      thinking: { type: "adaptive" },
-      output_config: { effort: "medium" },
-      system: sys,
-      tools: TOOLS.map(({ name, description, input_schema, eager_input_streaming }) => ({ name, description, input_schema, eager_input_streaming })),
-      messages,
-    });
-    for await (const ev of s) {
-      if (ev.type === "content_block_delta" && ev.delta.type === "text_delta") onText(ev.delta.text);
-    }
-    const msg = await s.finalMessage();
-    if (msg.stop_reason === "refusal") {
-      onText("FRIDAY can't help with that request.");
+    const res = await complete({ messages, tools, maxTokens: 2048 });
+    if (!res.toolCalls.length) {
+      // Free tiers don't stream tool turns, so send the finished answer in line-sized chunks.
+      for (const chunk of (res.content ?? "").match(/[^\n]*\n?/g) ?? []) if (chunk) onText(chunk);
       return;
     }
-    // Only run tools on a clean tool_use stop (a max_tokens stop may carry truncated input).
-    const calls = msg.content.filter((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === "tool_use");
-    if (msg.stop_reason !== "tool_use" || !calls.length) return;
-
-    messages.push({ role: "assistant", content: msg.content });
-    const results = await Promise.all(
-      calls.map(async (c): Promise<Anthropic.Beta.BetaToolResultBlockParam> => {
-        const tool = TOOLS.find((t) => t.name === c.name);
-        onTool(c.name);
-        const parsed = tool?.schema.safeParse(c.input);
-        if (!tool || !parsed?.success) return { type: "tool_result", tool_use_id: c.id, is_error: true, content: "INVALID_INPUT" };
-        try {
-          return { type: "tool_result", tool_use_id: c.id, content: JSON.stringify(await tool.run(db, userId, parsed.data as never)) };
-        } catch (e) {
-          return { type: "tool_result", tool_use_id: c.id, is_error: true, content: e instanceof Error ? e.message : "Tool failed" };
-        }
-      }),
-    );
-    messages.push({ role: "user", content: results });
+    messages.push({ role: "assistant", content: res.content, tool_calls: res.toolCalls });
+    for (const c of res.toolCalls) {
+      const tool = TOOLS.find((t) => t.name === c.function.name);
+      onTool(c.function.name);
+      let content: string;
+      try {
+        const parsed = tool?.schema.safeParse(JSON.parse(c.function.arguments || "{}"));
+        content = !tool || !parsed?.success ? "INVALID_INPUT" : JSON.stringify(await tool.run(db, userId, parsed.data as never));
+      } catch (e) {
+        content = e instanceof Error ? e.message : "Tool failed";
+      }
+      messages.push({ role: "tool", tool_call_id: c.id, content });
+    }
   }
 }
