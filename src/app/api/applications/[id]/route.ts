@@ -21,7 +21,7 @@ const Patch = z.object({
 export const GET = withUser<{ id: string }>(async ({ db, user }, { id }) => {
   const { data, error } = await db
     .from("applications")
-    .select("*, application_events(*), follow_ups(*), interviews(*), resume_versions(id, label, created_at), jobs(id, title, deadline, status, apply_url)")
+    .select("*, application_events!application_events_parent_owner_fk(*), follow_ups!follow_ups_parent_owner_fk(*), interviews!interviews_parent_owner_fk(*), resume_versions!applications_resume_owner_fk(id, label, created_at), jobs(id, title, deadline, status, apply_url)")
     .eq("id", id)
     .eq("user_id", user.id)
     .maybeSingle();

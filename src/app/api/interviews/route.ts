@@ -12,7 +12,7 @@ const Create = z.object({
 /** GET /api/interviews — upcoming interviews (?from=ISO&to=ISO for a calendar range). */
 export const GET = withUser(async ({ db, user, req }) => {
   const sp = new URL(req.url).searchParams;
-  let q = db.from("interviews").select("*, applications(id, company_name, job_title, status)").eq("user_id", user.id).order("scheduled_at");
+  let q = db.from("interviews").select("*, applications!interviews_parent_owner_fk(id, company_name, job_title, status)").eq("user_id", user.id).order("scheduled_at");
   if (sp.get("from")) q = q.gte("scheduled_at", sp.get("from")!);
   if (sp.get("to")) q = q.lte("scheduled_at", sp.get("to")!);
   const { data, error } = await q;

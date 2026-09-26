@@ -3,8 +3,9 @@
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useState, useRef } from "react";
 import { Button, Field, Input, Label, cx } from "@/components/ui";
+import { safeNextPath } from "@/lib/auth/safe-next";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 
 export default function LoginPage() {
@@ -18,19 +19,24 @@ export default function LoginPage() {
 function Login() {
   const router = useRouter();
   const sp = useSearchParams();
-  const next = sp.get("next") ?? "/dashboard";
+  const next = safeNextPath(sp.get("next"));
   const [mode, setMode] = useState<"signin" | "signup" | "magic">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(sp.get("error") ? { ok: false, text: sp.get("error")! } : null);
 
+  const submitting = useRef(false);
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting.current) return;
+    submitting.current = true;
     setBusy(true);
     setMsg(null);
     const supabase = createSupabaseBrowser();
-    const redirect = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
+    // Email links point at the configured public site (the Vercel app); fall back to wherever this page is served from.
+    const site = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || window.location.origin;
+    const redirect = `${site}/auth/callback?next=${encodeURIComponent(next)}`;
     try {
       if (mode === "signin") {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -52,6 +58,7 @@ function Login() {
     } catch (err) {
       setMsg({ ok: false, text: (err as Error).message });
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   };
@@ -78,7 +85,7 @@ function Login() {
           {msg && <p className={cx("text-[13px]", msg.ok ? "text-moss" : "text-accent")}>{msg.text}</p>}
           <Button type="submit" variant="primary" size="lg" disabled={busy}>
             {busy && <Loader2 size={16} className="animate-spin" />}
-            {mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Email me a link"}
+            {busy ? "Please wait…" : mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Email me a link"}
           </Button>
           <button type="button" onClick={() => setMode(mode === "magic" ? "signin" : "magic")} className="text-[13px] text-muted hover:text-text">
             {mode === "magic" ? "Use a password instead" : "Email me a sign-in link instead"}

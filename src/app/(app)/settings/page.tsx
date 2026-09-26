@@ -13,7 +13,7 @@ export default async function Settings() {
   const initial = await loadProfileValues(db, user.id, user.email);
   const status = [
     { label: "Job discovery", ok: isAdminConfigured(), off: "SUPABASE_SECRET_KEY missing — FRIDAY can't write newly discovered jobs." },
-    { label: "FRIDAY AI (resume parsing, tailoring, chat)", ok: isAiConfigured(), off: "ANTHROPIC_API_KEY missing — AI features are off; matching still works." },
+    { label: "FRIDAY AI (resume parsing, tailoring, chat)", ok: isAiConfigured(), off: "No free AI key set (GROQ_API_KEY, GEMINI_API_KEY or OPENROUTER_API_KEY) — AI features are off; matching and FRIDAY Local still work." },
     { label: "Daily schedule", ok: Boolean(process.env.CRON_SECRET), off: "CRON_SECRET missing — the morning run can't authenticate." },
   ];
   return (

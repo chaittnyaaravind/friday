@@ -19,7 +19,7 @@ const Create = z.union([
 export const GET = withUser(async ({ db, user }) => {
   const { data, error } = await db
     .from("applications")
-    .select("*, jobs(id, deadline, status, is_on_campus, companies(slug)), follow_ups(id, due_at, done_at, note), interviews(id, scheduled_at, kind)")
+    .select("*, jobs(id, deadline, status, is_on_campus, companies(slug)), follow_ups!follow_ups_parent_owner_fk(id, due_at, done_at, note), interviews!interviews_parent_owner_fk(id, scheduled_at, kind)")
     .eq("user_id", user.id)
     .order("position")
     .order("updated_at", { ascending: false });

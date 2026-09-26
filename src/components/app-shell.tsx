@@ -4,6 +4,7 @@ import {
   Bell, Briefcase, Building2, CalendarDays, Compass, FileText, GraduationCap, LayoutGrid, ListChecks, Menu, MessageSquare, Moon, Settings, Sun, SunMoon, X,
 } from "lucide-react";
 import Link from "next/link";
+import { SessionGuard } from "./session-guard";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { ago } from "@/lib/format";
@@ -26,7 +27,9 @@ const MOBILE = ["/dashboard", "/discover", "/sjsu", "/applications", "/chat"];
 
 type Note = { id: string; kind: string; title: string; body: string | null; job_id: string | null; application_id: string | null; read_at: string | null; created_at: string };
 
-export function AppShell({ children, name }: { children: ReactNode; name: string | null }) {
+export function AppShell(props: { children: ReactNode; name: string | null }) { return <SessionGuard><ShellContent {...props} /></SessionGuard>; }
+
+function ShellContent({ children, name }: { children: ReactNode; name: string | null }) {
   const path = usePathname();
   // The mobile menu remembers which page it was opened on, so navigating closes it.
   const [moreAt, setMoreAt] = useState<string | null>(null);

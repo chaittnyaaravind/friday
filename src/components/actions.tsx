@@ -12,7 +12,7 @@ export async function api<T = unknown>(url: string, init?: RequestInit & { json?
     body: init?.json !== undefined ? JSON.stringify(init.json) : init?.body,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data as { error?: string }).error ?? `Request failed (${res.status})`);
+  if (!res.ok) throw Object.assign(new Error((data as { error?: string }).error ?? `Request failed (${res.status})`), { status: res.status });
   return data as T;
 }
 

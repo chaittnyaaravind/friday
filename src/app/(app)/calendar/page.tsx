@@ -19,8 +19,8 @@ export default async function CalendarPage() {
   const to = new Date(now.getTime() + 60 * 86_400_000).toISOString();
 
   const [{ data: interviews }, { data: follows }, { data: saved }] = await Promise.all([
-    db.from("interviews").select("id, scheduled_at, kind, location, applications(id, company_name, job_title)").eq("user_id", user.id).gte("scheduled_at", from).lte("scheduled_at", to),
-    db.from("follow_ups").select("id, due_at, note, applications(id, company_name, job_title)").eq("user_id", user.id).is("done_at", null).lte("due_at", to),
+    db.from("interviews").select("id, scheduled_at, kind, location, applications!interviews_parent_owner_fk(id, company_name, job_title)").eq("user_id", user.id).gte("scheduled_at", from).lte("scheduled_at", to),
+    db.from("follow_ups").select("id, due_at, note, applications!follow_ups_parent_owner_fk(id, company_name, job_title)").eq("user_id", user.id).is("done_at", null).lte("due_at", to),
     db.from("saved_jobs").select("job_id, jobs!inner(id, title, deadline, companies(name))").eq("user_id", user.id).gte("jobs.deadline", from.slice(0, 10)).lte("jobs.deadline", to.slice(0, 10)),
   ]);
 

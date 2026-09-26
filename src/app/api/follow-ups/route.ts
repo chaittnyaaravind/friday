@@ -7,7 +7,7 @@ const Update = z.object({ id: z.string().uuid(), done: z.boolean().optional(), d
 /** GET /api/follow-ups — open follow-ups, soonest first (?all=1 includes completed). */
 export const GET = withUser(async ({ db, user, req }) => {
   const all = new URL(req.url).searchParams.get("all") === "1";
-  let q = db.from("follow_ups").select("*, applications(id, company_name, job_title, status)").eq("user_id", user.id).order("due_at");
+  let q = db.from("follow_ups").select("*, applications!follow_ups_parent_owner_fk(id, company_name, job_title, status)").eq("user_id", user.id).order("due_at");
   if (!all) q = q.is("done_at", null);
   const { data, error } = await q;
   if (error) throw error;
