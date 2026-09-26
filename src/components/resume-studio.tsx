@@ -53,8 +53,9 @@ export function ResumeUpload({ hasResume }: { hasResume: boolean }) {
         {busy ? <Loader2 size={22} className="animate-spin text-accent" /> : <FileUp size={22} strokeWidth={1.5} className="text-muted" />}
         <span className="text-[15px]">{busy ? "Reading your resume…" : hasResume ? "Upload a new version" : "Drop your resume here"}</span>
         <span className="text-[12.5px] text-dim">PDF, DOCX or TXT · up to 5 MB · read locally, no AI · original kept untouched</span>
+        <span className="text-[12px] text-dim">Scanned or photographed? PNG/JPG works too — read with an AI document parser, and every line asks for your confirmation.</span>
       </button>
-      <input ref={input} type="file" accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" hidden onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
+      <input ref={input} type="file" accept=".pdf,.docx,.txt,.png,.jpg,.jpeg,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,image/png,image/jpeg" hidden onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
       {err && <p className="text-[13px] text-accent">{err}</p>}
       {note && <p className="text-[13px] text-muted">{note}</p>}
     </div>
