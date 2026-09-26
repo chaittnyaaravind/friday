@@ -154,7 +154,7 @@ export async function runDiscovery(
 // ───────────────────────── MATCH ─────────────────────────
 
 type JobForMatch = {
-  id: string; company_id: string; title: string; employment_type: MatchJob["employmentType"]; category: string | null; is_on_campus: boolean;
+  id: string; company_id: string; imported_by: string | null; title: string; employment_type: MatchJob["employmentType"]; category: string | null; is_on_campus: boolean;
   lat: number | null; lng: number | null; city: string | null; is_remote: boolean; is_hybrid: boolean; description: string | null;
   companies: { name: string } | null;
   job_requirements: { label: string; kind: "required" | "preferred"; skills: { slug: string } | null }[];
@@ -166,7 +166,7 @@ export async function loadActiveJobsForMatching(db: SupabaseClient, onlyIds?: st
   for (let from = 0; ; from += pageSize) {
     let q = db
       .from("jobs")
-      .select("id, company_id, title, employment_type, category, is_on_campus, lat, lng, city, is_remote, is_hybrid, description, companies(name), job_requirements(label, kind, skills(slug))")
+      .select("id, company_id, imported_by, title, employment_type, category, is_on_campus, lat, lng, city, is_remote, is_hybrid, description, companies(name), job_requirements(label, kind, skills(slug))")
       .eq("status", "active")
       .range(from, from + pageSize - 1);
     if (onlyIds) q = q.in("id", onlyIds);
@@ -222,7 +222,9 @@ export async function rematchAll(db: SupabaseClient, opts: { userId?: string; ne
   for (const u of users) {
     const profile = await loadMatchProfile(db, u.id);
     if (!profile) continue;
-    const rows = jobs.map((j) => {
+    // A student's imports are private: never score, or reveal the requirements of, someone else's.
+    const visible = jobs.filter((j) => !j.imported_by || j.imported_by === u.id);
+    const rows = visible.map((j) => {
       const m = computeMatch(profile, toMatchJob(j));
       return { user_id: u.id, job_id: j.id, score: m.score, strong: m.strong, missing: m.missing, difficulty: m.difficulty, distance_miles: m.distanceMiles, computed_at: new Date().toISOString() };
     });
@@ -234,7 +236,7 @@ export async function rematchAll(db: SupabaseClient, opts: { userId?: string; ne
     // Alerts for brand-new opportunities only — and only if the student wants them, above their own threshold.
     const prefs = normalizePrefs(u.notification_prefs);
     if (opts.newJobIds?.size && prefs.in_app.new_matches) {
-      const fresh = jobs.filter((j) => opts.newJobIds!.has(j.id));
+      const fresh = visible.filter((j) => opts.newJobIds!.has(j.id));
       const scored = new Map(rows.map((r) => [r.job_id, r]));
       const { data: watch } = await db.from("company_watchlists").select("company_id").eq("user_id", u.id);
       const followed = new Set((watch ?? []).map((w) => w.company_id as string));

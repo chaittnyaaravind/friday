@@ -10,6 +10,7 @@ import { canonicalKey, classifyCategory, classifyRole, parseDeadline, parsePay }
 import { isAuthRestricted } from "@/lib/domain/match";
 import { extractRequirements } from "@/lib/domain/requirements";
 import { skillBySlug } from "@/lib/domain/skills";
+import { privateCanonical, privateCompanySlug, privateExternalId } from "./import-scope";
 import type { RawPosting } from "./sources";
 
 export type NormalizedJob = {
@@ -189,30 +190,42 @@ const IMPORT_SOURCE = { handshake: "handshake_import", linkedin: "linkedin_impor
 const AGGREGATOR = /(?:^|\.)(?:linkedin\.com|indeed\.com|joinhandshake\.com|glassdoor\.com|ziprecruiter\.com|simplify\.jobs|wayup\.com)$/i;
 
 /**
- * A user pastes a listing FRIDAY can't crawl. It joins the same dedupe pipeline:
- * if the role already exists (e.g. found on the company's Greenhouse), the import is
- * attached as an extra source and the official apply URL is kept.
+ * A student brings a listing FRIDAY can't crawl (Handshake, LinkedIn, Indeed, a company page).
+ *
+ * It is PRIVATE to that student (migration 0009): the job, its source and any company it creates carry
+ * `imported_by`, and RLS shows them only to their owner. An import never changes a public row, never overwrites
+ * an apply link, and is never recorded as an official source. If the same role already exists in the public
+ * catalog (e.g. found on the employer's own Greenhouse), the import is attached to it as a private extra source
+ * and the public listing is left exactly as it was.
  */
-export async function importPosting(db: SupabaseClient, input: ImportInput, skillIds: Map<string, number>) {
+export async function importPosting(db: SupabaseClient, input: ImportInput, skillIds: Map<string, number>, userId: string) {
   const host = new URL(input.url).hostname;
-  const companySlug = input.onCampus ? "sjsu-handshake" : input.company.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const baseSlug = input.onCampus ? "sjsu-handshake" : input.company.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
-  let { data: company } = await db.from("companies").select("id, slug").eq("slug", companySlug).maybeSingle();
+  // Prefer the public company with this slug so the listing groups with the employer's real page;
+  // otherwise the company is private to this student.
+  let { data: company } = await db.from("companies").select("id, slug").eq("slug", baseSlug).is("imported_by", null).maybeSingle();
   if (!company) {
-    const { data: created, error } = await db
-      .from("companies")
-      .insert({
-        slug: companySlug,
-        name: input.onCampus ? "SJSU (via Handshake)" : input.company.trim(),
-        ats: "careers_page",
-        discoverable: false,
-        is_sjsu: Boolean(input.onCampus),
-        careers_url: AGGREGATOR.test(host) ? null : `https://${host}`,
-      })
-      .select("id, slug")
-      .single();
-    if (error) throw error;
-    company = created;
+    const slug = privateCompanySlug(userId, baseSlug);
+    const { data: mine } = await db.from("companies").select("id, slug").eq("slug", slug).eq("imported_by", userId).maybeSingle();
+    if (mine) company = mine;
+    else {
+      const { data: created, error } = await db
+        .from("companies")
+        .insert({
+          slug,
+          name: input.onCampus ? "SJSU (via Handshake)" : input.company.trim(),
+          ats: "careers_page",
+          discoverable: false,
+          is_sjsu: Boolean(input.onCampus),
+          careers_url: AGGREGATOR.test(host) ? null : `https://${host}`,
+          imported_by: userId,
+        })
+        .select("id, slug")
+        .single();
+      if (error) throw error;
+      company = created;
+    }
   }
 
   const role = classifyRole(input.title, { onCampus: input.onCampus });
@@ -220,53 +233,61 @@ export async function importPosting(db: SupabaseClient, input: ImportInput, skil
   const text = input.description ?? "";
   const pay = parsePay(input.pay ?? text);
   const canonical = canonicalKey(company.slug, input.title, input.onCampus ? "sjsu" : loc.city, loc.isRemote);
-  const official = !AGGREGATOR.test(host);
   const source = IMPORT_SOURCE[input.source];
 
-  const { data: existing } = await db.from("jobs").select("id, apply_url_is_official").eq("canonical_key", canonical).maybeSingle();
-  let jobId = existing?.id as string | undefined;
+  // 1) The same role in the PUBLIC catalog: attach a private source, change nothing public.
+  const { data: publicJob } = await db.from("jobs").select("id").eq("canonical_key", canonical).is("imported_by", null).maybeSingle();
+  let jobId = publicJob?.id as string | undefined;
+  let merged = Boolean(publicJob);
+
+  // 2) Otherwise this student's own copy — reused if they imported it before, created if not.
   if (!jobId) {
-    const { data: created, error } = await db
-      .from("jobs")
-      .insert({
-        company_id: company.id,
-        canonical_key: canonical,
-        title: input.title.trim(),
-        description: text.slice(0, 60_000) || null,
-        employment_type: role.employmentType,
-        category: classifyCategory(input.title) ?? (input.onCampus ? "Campus" : null),
-        is_on_campus: Boolean(input.onCampus),
-        location_text: input.location ?? null,
-        city: input.onCampus ? "San Jose" : loc.city,
-        lat: input.onCampus ? 37.3352 : loc.lat,
-        lng: input.onCampus ? -121.8811 : loc.lng,
-        is_remote: loc.isRemote,
-        is_hybrid: loc.isHybrid,
-        pay_text: pay?.text ?? null,
-        pay_min: pay?.min ?? null,
-        pay_max: pay?.max ?? null,
-        deadline: input.deadline || parseDeadline(text),
-        apply_url: input.url,
-        apply_url_is_official: official,
-        auth_restricted: isAuthRestricted(text),
-      })
-      .select("id")
-      .single();
-    if (error) throw error;
-    jobId = created.id as string;
-    const reqs = extractRequirements(text).map((r) => ({ job_id: jobId!, skill_id: skillIds.get(r.slug) ?? null, label: skillBySlug(r.slug)?.name ?? r.slug, kind: r.kind }));
-    if (reqs.length) await db.from("job_requirements").upsert(reqs, { onConflict: "job_id,label", ignoreDuplicates: true });
-  } else if (official && !existing?.apply_url_is_official) {
-    // An official link beats an aggregator link that was imported earlier.
-    await db.from("jobs").update({ apply_url: input.url, apply_url_is_official: true }).eq("id", jobId);
+    const mineKey = privateCanonical(userId, canonical);
+    const { data: mine } = await db.from("jobs").select("id").eq("canonical_key", mineKey).eq("imported_by", userId).maybeSingle();
+    if (mine) {
+      jobId = mine.id as string;
+      merged = true;
+    } else {
+      const { data: created, error } = await db
+        .from("jobs")
+        .insert({
+          company_id: company.id,
+          canonical_key: mineKey,
+          imported_by: userId,
+          title: input.title.trim(),
+          description: text.slice(0, 60_000) || null,
+          employment_type: role.employmentType,
+          category: classifyCategory(input.title) ?? (input.onCampus ? "Campus" : null),
+          is_on_campus: Boolean(input.onCampus),
+          location_text: input.location ?? null,
+          city: input.onCampus ? "San Jose" : loc.city,
+          lat: input.onCampus ? 37.3352 : loc.lat,
+          lng: input.onCampus ? -121.8811 : loc.lng,
+          is_remote: loc.isRemote,
+          is_hybrid: loc.isHybrid,
+          pay_text: pay?.text ?? null,
+          pay_min: pay?.min ?? null,
+          pay_max: pay?.max ?? null,
+          deadline: input.deadline || parseDeadline(text),
+          apply_url: input.url,
+          apply_url_is_official: false, // the student's own link — never presented as the employer's
+          auth_restricted: isAuthRestricted(text),
+        })
+        .select("id")
+        .single();
+      if (error) throw error;
+      jobId = created.id as string;
+      const reqs = extractRequirements(text).map((r) => ({ job_id: jobId!, skill_id: skillIds.get(r.slug) ?? null, label: skillBySlug(r.slug)?.name ?? r.slug, kind: r.kind }));
+      if (reqs.length) await db.from("job_requirements").upsert(reqs, { onConflict: "job_id,label", ignoreDuplicates: true });
+    }
   }
 
   const { error: srcErr } = await db.from("job_sources").upsert(
-    { job_id: jobId, source, source_name: sourceName(input.source, host), external_id: input.url, url: input.url, is_official: official, last_seen_at: new Date().toISOString() },
+    { job_id: jobId, source, source_name: sourceName(input.source, host), external_id: privateExternalId(userId, input.url), url: input.url, is_official: false, imported_by: userId, last_seen_at: new Date().toISOString() },
     { onConflict: "source,external_id" },
   );
   if (srcErr) throw srcErr;
-  return { jobId, merged: Boolean(existing) };
+  return { jobId, merged };
 }
 
 function sourceName(source: ImportInput["source"], host: string) {
