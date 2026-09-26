@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { body, HttpError, ok, withUser } from "@/lib/api";
+import { applyFollowUps } from "@/lib/data/followups";
+import { plannedFollowUps } from "@/lib/domain/followups";
 
 const Create = z.object({
   applicationId: z.string().uuid(),
@@ -36,6 +38,8 @@ export const POST = withUser(async ({ db, user, req }) => {
   if (early && input.kind !== "assessment") {
     await db.from("application_events").insert({ application_id: app.id, user_id: user.id, kind: "status", from_status: app.status, to_status: "interview", note: "Interview scheduled" });
   }
+  // Suggest preparation the day before (one open suggestion per application; repeats never duplicate).
+  await applyFollowUps(db, { userId: user.id, applicationId: app.id, status: early && input.kind !== "assessment" ? "interview" : app.status, planned: plannedFollowUps({ from: app.status, to: app.status, interviewAt: input.scheduledAt }) });
   return ok({ interview: data }, { status: 201 });
 });
 

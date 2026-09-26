@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { body, HttpError, ok, withUser } from "@/lib/api";
+import { applyFollowUps } from "@/lib/data/followups";
+import { isTerminal, plannedFollowUps } from "@/lib/domain/followups";
 import { STATUS_ORDER } from "@/lib/format";
 
 const Patch = z.object({
@@ -14,6 +16,7 @@ const Patch = z.object({
   interview_at: z.string().datetime({ offset: true }).nullish(),
   follow_up_at: z.string().datetime({ offset: true }).nullish(),
   notes: z.string().max(20_000).nullish(),
+  next_action: z.string().trim().max(300).nullish().or(z.literal("").transform(() => null)),
   location: z.string().max(200).nullish(),
 });
 
@@ -49,14 +52,14 @@ export const PATCH = withUser<{ id: string }>(async ({ db, user, req }, { id }) 
 
   if (moving) {
     await db.from("application_events").insert({ application_id: id, user_id: user.id, kind: "status", from_status: current.status, to_status: patch.status });
-    // First time it's marked applied, suggest a follow-up a week out (editable, dismissible).
-    if (patch.status === "applied" && !current.follow_up_at) {
-      const due = new Date(Date.now() + 7 * 86_400_000).toISOString();
-      await db.from("follow_ups").insert({ application_id: id, user_id: user.id, due_at: due, note: "Check in on your application" });
-      await db.from("applications").update({ follow_up_at: due }).eq("id", id);
-    }
   } else if (Object.keys(patch).some((k) => k !== "position")) {
     await db.from("application_events").insert({ application_id: id, user_id: user.id, kind: "updated", note: Object.keys(patch).join(", ") });
+  }
+  // Suggested follow-ups (a week after applying, recruiter reply after an assessment, interview prep the day
+  // before). Editable and dismissible; idempotent, so repeating a request never duplicates one.
+  const planned = plannedFollowUps({ from: current.status, to: patch.status ?? current.status, interviewAt: patch.interview_at ?? null });
+  if (moving || patch.interview_at || isTerminal(app.status)) {
+    await applyFollowUps(db, { userId: user.id, applicationId: id, status: app.status, planned });
   }
   return ok({ application: app });
 });

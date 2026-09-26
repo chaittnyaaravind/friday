@@ -5,7 +5,9 @@ import { JobGrid } from "@/components/job-card";
 import { ResumeSteps } from "@/components/resume/status";
 import { CountUp, Reveal, Stagger } from "@/components/motion";
 import { Card, CompanyMark, Label, LinkButton, MatchBadge, Notice, SectionHeader, cx } from "@/components/ui";
+import { AnalyticsPanel, TodayPanel, type TodayItem } from "@/components/dashboard-panels";
 import { searchJobs } from "@/lib/data/jobs";
+import { analyze } from "@/lib/domain/analytics";
 import { resumeStatus } from "@/lib/resume/profile";
 import { ago, greeting, miles, place, TYPE_LABEL } from "@/lib/format";
 import { createSupabaseServer, isAdminConfigured, requireUser } from "@/lib/supabase/server";
@@ -21,7 +23,7 @@ export default async function Dashboard() {
   const { data: profile } = await db.from("profiles").select("full_name, radius_miles, origin_label, work_authorization").eq("id", user.id).single();
   const radius = profile?.radius_miles ?? 25;
 
-  const [best, fresh, campus, interns, nearby, apps, interviews, follows, deadlines, lastRun, digest, resume] = await Promise.all([
+  const [best, fresh, campus, interns, nearby, apps, interviews, follows, deadlines, lastRun, digest, resume, dueFollows, soonInterviews, allApps] = await Promise.all([
     searchJobs(db, { postedWithinDays: 14, sort: "match", limit: 6 }),
     searchJobs(db, { postedWithinDays: 1, sort: "match", limit: 100 }),
     searchJobs(db, { onCampus: true, sort: "new", limit: 3 }),
@@ -34,7 +36,23 @@ export default async function Dashboard() {
     db.from("agent_runs").select("finished_at, status, stats").eq("kind", "discovery").not("finished_at", "is", null).order("finished_at", { ascending: false }).limit(1).maybeSingle(),
     db.from("notifications").select("title, body").eq("user_id", user.id).eq("kind", "digest").order("created_at", { ascending: false }).limit(1).maybeSingle(),
     resumeStatus(db, user.id),
+    db.from("follow_ups").select("id, due_at, note, applications!follow_ups_parent_owner_fk(id, company_name, job_title)").eq("user_id", user.id).is("done_at", null).lte("due_at", in7).order("due_at").limit(8),
+    db.from("interviews").select("id, scheduled_at, kind, applications!interviews_parent_owner_fk(id, company_name, job_title)").eq("user_id", user.id).gte("scheduled_at", now.toISOString()).lte("scheduled_at", in7).order("scheduled_at").limit(8),
+    db.from("applications").select("status, applied_at, source, interviews!interviews_parent_owner_fk(id)").eq("user_id", user.id),
   ]);
+
+  type AppRef = { id: string; company_name: string; job_title: string } | null;
+  const today: TodayItem[] = [
+    ...(dueFollows.data ?? []).map((f) => {
+      const a = f.applications as unknown as AppRef;
+      return { id: f.id as string, kind: "follow_up" as const, at: f.due_at as string, title: (f.note as string | null) ?? "Follow up", detail: a ? `${a.job_title} · ${a.company_name}` : "Application", href: a ? `/applications?open=${a.id}` : "/applications" };
+    }),
+    ...(soonInterviews.data ?? []).map((i) => {
+      const a = i.applications as unknown as AppRef;
+      return { id: i.id as string, kind: "interview" as const, at: i.scheduled_at as string, title: `Interview${i.kind && i.kind !== "interview" ? ` · ${i.kind}` : ""}`, detail: a ? `${a.job_title} · ${a.company_name}` : "Application", href: a ? `/applications?open=${a.id}` : "/applications" };
+    }),
+  ].sort((x, y) => Date.parse(x.at) - Date.parse(y.at));
+  const analytics = analyze((allApps.data ?? []) as unknown as Parameters<typeof analyze>[0]);
 
   const newMatches = fresh.jobs.filter((j) => j.is_on_campus || (j.score ?? 0) >= 55).length;
   const first = profile?.full_name?.split(" ")[0];
@@ -90,6 +108,8 @@ export default async function Dashboard() {
           </Link>
         ))}
       </Stagger>
+
+      <Reveal><TodayPanel items={today} now={now.getTime()} /></Reveal>
 
       <Reveal>
         <Card className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
@@ -155,6 +175,11 @@ export default async function Dashboard() {
       <Reveal as="section" className="flex flex-col gap-5">
         <SectionHeader eyebrow="Silicon Valley" title="Internships near campus" action={<LinkButton href="/internships" variant="ghost" size="sm">All internships <ArrowUpRight size={14} /></LinkButton>} />
         <JobGrid jobs={interns.jobs} empty={{ title: `No internships within ${radius} miles yet`, body: "Try a wider radius, or include remote roles on the Internships page." }} />
+      </Reveal>
+
+      <Reveal as="section" className="flex flex-col gap-5">
+        <SectionHeader eyebrow="Your search" title="Analytics" action={<LinkButton href="/applications" variant="ghost" size="sm">Applications <ArrowUpRight size={14} /></LinkButton>} />
+        <AnalyticsPanel a={analytics} />
       </Reveal>
     </div>
   );

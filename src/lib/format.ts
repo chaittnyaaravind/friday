@@ -31,11 +31,12 @@ export const STATUS_LABEL: Record<string, string> = {
   applied: "Applied",
   assessment: "Assessment",
   interview: "Interview",
+  final_round: "Final round",
   offer: "Offer",
   rejected: "Rejected",
   withdrawn: "Withdrawn",
 };
-export const STATUS_ORDER = ["saved", "preparing", "ready", "applied", "assessment", "interview", "offer", "rejected", "withdrawn"] as const;
+export const STATUS_ORDER = ["saved", "preparing", "ready", "applied", "assessment", "interview", "final_round", "offer", "rejected", "withdrawn"] as const;
 export type AppStatus = (typeof STATUS_ORDER)[number];
 
 export function ago(iso: string | null | undefined) {

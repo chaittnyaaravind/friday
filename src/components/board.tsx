@@ -4,6 +4,7 @@ import { ArrowUpRight, CalendarPlus, Check, Loader2, Plus, Trash2, X } from "luc
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
+import { analyze, MIN_SAMPLE } from "@/lib/domain/analytics";
 import { ago, dateTime, shortDate, STATUS_LABEL, STATUS_ORDER, type AppStatus } from "@/lib/format";
 import { api } from "./actions";
 import { CountUp, Stagger } from "./motion";
@@ -14,11 +15,12 @@ export type App = {
   original_url: string | null; application_url: string | null; status: AppStatus; position: number; discovered_at: string | null;
   applied_at: string | null; cover_letter: string | null; contact_name: string | null; contact_email: string | null;
   interview_at: string | null; follow_up_at: string | null; notes: string | null; updated_at: string; resume_version_id: string | null;
+  next_action?: string | null;
   follow_ups: { id: string; due_at: string; done_at: string | null; note: string | null }[];
   interviews: { id: string; scheduled_at: string; kind: string }[];
 };
 
-const ACTIVE: AppStatus[] = ["saved", "preparing", "ready", "applied", "assessment", "interview", "offer"];
+const ACTIVE: AppStatus[] = ["saved", "preparing", "ready", "applied", "assessment", "interview", "final_round", "offer"];
 const CLOSED: AppStatus[] = ["rejected", "withdrawn"];
 
 export function Board({ initial, versions }: { initial: App[]; versions: { id: string; label: string }[] }) {
@@ -185,6 +187,8 @@ function Drawer({ a, versions, onClose, onChange, onDeleted }: { a: App; version
         </Field>
         {f.status === "ready" && <p className="-mt-3 text-[12.5px] text-muted">When you&apos;ve submitted it on the employer&apos;s site, set the status to <span className="text-text">Applied</span>. FRIDAY never marks it for you.</p>}
 
+        <Field label="Next action"><Input value={f.next_action ?? ""} onChange={txt("next_action")} onBlur={blur("next_action")} maxLength={300} placeholder="e.g. Email the recruiter, finish the assessment" /></Field>
+
         <div className="grid grid-cols-2 gap-3">
           <Field label="Contact"><Input value={f.contact_name ?? ""} onChange={txt("contact_name")} onBlur={blur("contact_name")} placeholder="Recruiter name" /></Field>
           <Field label="Contact email"><Input type="email" value={f.contact_email ?? ""} onChange={txt("contact_email")} onBlur={blur("contact_email")} /></Field>
@@ -291,20 +295,20 @@ function AddDialog({ onClose, onAdded }: { onClose: () => void; onAdded: (a: App
 }
 
 export function BoardSummary({ apps }: { apps: App[] }) {
-  const applied = apps.filter((a) => a.applied_at).length;
-  const interviews = apps.filter((a) => ["interview", "offer"].includes(a.status)).length;
-  const rate = applied ? Math.round((interviews / applied) * 100) : null;
+  const s = analyze(apps);
   return (
     <Stagger className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       {[
-        ["Tracked", apps.length],
-        ["Applied", applied],
-        ["Interviews", interviews],
-        ["Response rate", rate == null ? "—" : `${rate}%`],
+        ["Tracked", s.total],
+        ["Applied", s.applied],
+        ["Interviews", s.interviewed],
+        // A rate only appears once there are enough applications for it to mean something.
+        ["Response rate", s.responseRate == null ? "—" : `${s.responseRate}%`],
       ].map(([l, v]) => (
         <Card key={l} className="flex flex-col gap-2 p-4">
           <Label>{l}</Label>
           {typeof v === "number" ? <CountUp value={v} className="num text-[28px] font-light leading-none tracking-[-0.03em]" /> : <span className="num text-[28px] font-light leading-none tracking-[-0.03em]">{v}</span>}
+          {l === "Response rate" && s.responseRate == null && <span className="text-[11.5px] text-dim">Needs {MIN_SAMPLE}+ applications</span>}
         </Card>
       ))}
     </Stagger>
