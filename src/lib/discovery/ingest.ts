@@ -4,6 +4,7 @@
  * The official employer/ATS URL always wins over an aggregator or user import.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { archiveCutoff } from "@/lib/domain/freshness";
 import { resolveLocation } from "@/lib/domain/geo";
 import { canonicalKey, classifyCategory, classifyRole, parseDeadline, parsePay } from "@/lib/domain/normalize";
 import { isAuthRestricted } from "@/lib/domain/match";
@@ -62,7 +63,7 @@ export function normalizePosting(p: RawPosting, company: { id: string; slug: str
       pay_max: pay?.max ?? null,
       hours_text: hoursFrom(text),
       work_study: workStudy,
-      deadline: parseDeadline(text),
+      deadline: p.deadline ?? parseDeadline(text),
       posted_at: p.postedAt,
       last_verified_at: new Date().toISOString(),
       status: "active",
@@ -157,6 +158,17 @@ export async function closeStale(db: SupabaseClient, companyId: string, source: 
   const { error: upErr } = await db.from("jobs").update({ status: "closed" }).in("id", ids).lt("last_verified_at", runStartedAt);
   if (upErr) throw upErr;
   return ids.length;
+}
+
+/**
+ * ARCHIVE: an active listing no source has confirmed for ARCHIVE_DAYS is marked expired, so it can never
+ * keep looking open on evidence that stopped arriving (manual imports, retired sources, changed filters).
+ * Deadlines are shown in the UI but never auto-expire a job: they are parsed from free text.
+ */
+export async function archiveExpired(db: SupabaseClient, now: number = Date.now()): Promise<number> {
+  const { data, error } = await db.from("jobs").update({ status: "expired" }).eq("status", "active").lt("last_verified_at", archiveCutoff(now)).select("id");
+  if (error) throw error;
+  return data?.length ?? 0;
 }
 
 // ───────────────────────── User imports (Handshake / LinkedIn / Indeed / other) ─────────────────────────

@@ -1,6 +1,7 @@
 import { AlertTriangle, Check } from "lucide-react";
 import Link from "next/link";
 import type { JobListItem } from "@/lib/data/jobs";
+import { freshnessOf } from "@/lib/domain/freshness";
 import { ago, deadlineLabel, miles, place, TYPE_LABEL } from "@/lib/format";
 import { SaveButton } from "./actions";
 import { Stagger } from "./motion";
@@ -8,6 +9,8 @@ import { Card, Chip, CompanyMark, EmptyState, MatchBadge, cx } from "./ui";
 
 export function JobCard({ job }: { job: JobListItem }) {
   const dl = deadlineLabel(job.deadline);
+  // The feed only lists active jobs, so this reflects how recently a source confirmed it.
+  const fresh = freshnessOf({ status: "active", discovered_at: job.discovered_at, last_verified_at: job.last_verified_at, deadline: job.deadline });
   const strongSkills = (job.strong ?? []).filter((r) => r.kind === "skill").slice(0, 3);
   const missing = (job.missing ?? []).filter((m) => m.kind === "required").slice(0, 2);
   const official = job.sources.find((s) => s.official) ?? job.sources[0];
@@ -48,6 +51,7 @@ export function JobCard({ job }: { job: JobListItem }) {
         <div className="mt-auto flex items-end justify-between gap-3 pt-1">
           <div className="flex min-w-0 flex-col gap-1">
             <div className="flex flex-wrap items-center gap-1.5">
+              {fresh.state !== "active" && <Chip tone={fresh.state === "new" || fresh.state === "recent" ? "moss" : "amber"}>{fresh.label}</Chip>}
               <span className="label">{TYPE_LABEL[job.employment_type]}</span>
               {job.category && job.category !== "Campus" && <span className="label">· {job.category}</span>}
               {job.work_study !== "unknown" && job.work_study !== "not_required" && <span className="label !text-amber">· Work-study {job.work_study}</span>}

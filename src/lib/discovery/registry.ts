@@ -178,6 +178,9 @@ export const REGISTRY: RegistryCompany[] = [
   ab("posthog", "PostHog", "posthog", "posthog.com", "San Francisco", "Analytics"),
   ab("resend", "Resend", "resend", "resend.com", "San Francisco", "Developer tools"),
 
+  // ── U.S. federal internships and Pathways roles via the official USAJOBS API (needs USAJOBS_API_KEY + USAJOBS_USER_AGENT) ──
+  { slug: "usajobs", name: "U.S. Federal Government (USAJOBS)", domain: "usajobs.gov", hqCity: "Washington", industry: "Government", ats: "usajobs", careersUrl: "https://www.usajobs.gov", config: { keywords: "intern,student trainee,pathways", location: "San Jose, California", radius: "60" } },
+
   // ── SJSU official hiring pages (on-campus) ──
   sjsu("sjsu-associated-students", "SJSU Associated Students", "https://www.sjsu.edu/as/jobs/index.php", "Associated Students"),
   sjsu("sjsu-library", "SJSU King Library", "https://library.sjsu.edu/employment/employment-opportunities/", "King Library"),

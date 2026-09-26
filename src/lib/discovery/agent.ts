@@ -8,9 +8,9 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { computeMatch, type MatchJob, type MatchProfile } from "@/lib/domain/match";
 import { SKILLS } from "@/lib/domain/skills";
-import { closeStale, normalizePosting, upsertJobs, type NormalizedJob } from "./ingest";
+import { archiveExpired, closeStale, normalizePosting, upsertJobs, type NormalizedJob } from "./ingest";
 import { REGISTRY } from "./registry";
-import { ADAPTERS, type CompanyFeed, type SourceKind } from "./sources";
+import { ADAPTERS, usajobsConfigured, type CompanyFeed, type SourceKind } from "./sources";
 
 type CompanyRow = { id: string; slug: string; name: string; ats: string | null; ats_config: Record<string, string>; discoverable: boolean };
 
@@ -66,6 +66,8 @@ export type DiscoveryReport = {
   kept: number;
   created: number;
   closed: number;
+  /** Active listings no source confirmed for ARCHIVE_DAYS, marked expired this run. */
+  archived: number;
   skipped: Record<string, number>;
   newJobIds: string[];
 };
@@ -82,7 +84,7 @@ export async function runDiscovery(
     .single();
   if (runErr) throw runErr;
 
-  const report: DiscoveryReport = { runId: run.id, companies: 0, failures: [], seen: 0, kept: 0, created: 0, closed: 0, skipped: {}, newJobIds: [] };
+  const report: DiscoveryReport = { runId: run.id, companies: 0, failures: [], seen: 0, kept: 0, created: 0, closed: 0, archived: 0, skipped: {}, newJobIds: [] };
   try {
     await syncCatalog(db);
     const skills = await skillIdMap(db);
@@ -96,6 +98,12 @@ export async function runDiscovery(
     await pool((companies ?? []) as CompanyRow[], 4, async (c) => {
       const adapter = ADAPTERS[c.ats as SourceKind];
       if (!adapter) return;
+      // A credentialed source without credentials is reported as skipped, not as a failure, and never faked.
+      if (c.ats === "usajobs" && !usajobsConfigured()) {
+        report.skipped["usajobs-not-configured"] = 1;
+        report.companies -= 1;
+        return;
+      }
       try {
         const feed: CompanyFeed = { slug: c.slug, name: c.name, ats: c.ats as SourceKind, config: c.ats_config };
         const postings = await adapter(feed);
@@ -117,6 +125,7 @@ export async function runDiscovery(
       }
     });
 
+    report.archived = await archiveExpired(db);
     await rematchAll(db, { newJobIds: new Set(report.newJobIds) });
     await raiseReminders(db);
 

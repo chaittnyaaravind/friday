@@ -6,7 +6,10 @@ import { ApplyPanel } from "@/components/apply-panel";
 import { Reveal, Stagger } from "@/components/motion";
 import { Card, Chip, CompanyMark, Label, Notice, cx } from "@/components/ui";
 import { getJob } from "@/lib/data/jobs";
+import { freshnessOf } from "@/lib/domain/freshness";
+import { matchConcerns, relevantEvidence } from "@/lib/domain/insights";
 import { authGuidance, learnSuggestion, type Gap, type Reason } from "@/lib/domain/match";
+import { loadProfileItems } from "@/lib/resume/profile";
 import { ago, deadlineLabel, longDate, miles, place, SOURCE_LABEL, TYPE_LABEL } from "@/lib/format";
 import { createSupabaseServer, requireUser } from "@/lib/supabase/server";
 
@@ -26,10 +29,11 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
   const detail = await getJob(db, id, user.id).catch(() => null);
   if (!detail) notFound();
   const { job, match, saved, application } = detail;
-  const [{ data: profile }, { count: resumes }, { data: latestResume }] = await Promise.all([
-    db.from("profiles").select("work_authorization").eq("id", user.id).single(),
+  const [{ data: profile }, { count: resumes }, { data: latestResume }, profileItems] = await Promise.all([
+    db.from("profiles").select("work_authorization, graduation_year, radius_miles").eq("id", user.id).single(),
     db.from("resumes").select("id", { count: "exact", head: true }).eq("user_id", user.id),
     db.from("resume_versions").select("id").eq("user_id", user.id).neq("kind", "legacy").order("updated_at", { ascending: false }).limit(1).maybeSingle(),
+    loadProfileItems(db, user.id),
   ]);
 
   const company = job.companies as { slug: string; name: string; careers_url: string | null; industry: string | null; is_sjsu: boolean };
@@ -42,6 +46,14 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
   const dl = deadlineLabel(job.deadline);
   const primary = sources[0];
   const closed = job.status !== "active";
+  const fresh = freshnessOf({ status: job.status, discovered_at: job.discovered_at, last_verified_at: job.last_verified_at, deadline: job.deadline });
+  const concerns = matchConcerns({
+    job: { title: job.title, description: job.description, isOnCampus: job.is_on_campus, isRemote: job.is_remote, status: job.status, discoveredAt: job.discovered_at, lastVerifiedAt: job.last_verified_at, deadline: job.deadline },
+    profile: { graduationYear: profile?.graduation_year ?? null, workAuthorization: profile?.work_authorization ?? null, radiusMiles: profile?.radius_miles ?? 30 },
+    distanceMiles: match?.distance_miles != null ? Number(match.distance_miles) : null,
+    missingRequired: missing.filter((m) => m.kind === "required").map((m) => m.label),
+  }).filter((c) => !(closed && /^(Closed|Expired)/.test(c.text))); // the closed notice already says this
+  const evidence = relevantEvidence(profileItems, strong.filter((s) => s.kind === "skill").map((s) => s.label));
   const difficulty = match?.difficulty as "low" | "medium" | "high" | undefined;
 
   const facts: [string, React.ReactNode][] = [
@@ -72,7 +84,11 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
           </div>
         </div>
         <h1 className="max-w-[22ch] text-[34px] leading-[1.02] md:text-[52px]">{job.title}</h1>
-        {closed && <Notice tone="amber" title="This listing is no longer on the employer's site">FRIDAY last saw it {ago(job.last_verified_at)}. It may have closed.</Notice>}
+        <div className="flex flex-wrap items-center gap-2">
+          <Chip tone={fresh.state === "new" || fresh.state === "recent" ? "moss" : fresh.state === "active" ? "neutral" : "amber"}>{fresh.label}</Chip>
+          <span className="text-[12.5px] text-dim">{fresh.detail}</span>
+        </div>
+        {closed && <Notice tone="amber" title={fresh.state === "expired" ? "This listing has expired" : "This listing is no longer on the employer's site"}>FRIDAY last saw it {ago(job.last_verified_at)}. It may have closed — check the official page before applying.</Notice>}
       </header>
 
       <div className="grid gap-8 lg:grid-cols-[1fr_360px] lg:gap-10">
@@ -111,6 +127,30 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
                 </ul>
               </div>
             </div>
+            {(evidence.experience.length > 0 || evidence.projects.length > 0) && (
+              <div className="flex flex-col gap-3 border-t-[0.5px] border-hairline-strong pt-5">
+                <Label>Your relevant experience</Label>
+                <ul className="flex flex-col gap-2 text-[14px]">
+                  {evidence.experience.map((e) => (
+                    <li key={`${e.title}-${e.organization}`}><span className="font-medium">{e.title}</span> · {e.organization} <span className="text-dim">— {e.skills.join(", ")}</span></li>
+                  ))}
+                  {evidence.projects.map((p) => (
+                    <li key={p.name}><span className="font-medium">{p.name}</span> <span className="text-dim">(project) — {p.skills.join(", ")}</span></li>
+                  ))}
+                </ul>
+                <p className="text-[12px] text-dim">Only items you confirmed on your profile, matched by the words already in them.</p>
+              </div>
+            )}
+            {concerns.length > 0 && (
+              <div className="flex flex-col gap-3 border-t-[0.5px] border-hairline-strong pt-5">
+                <Label className="!text-amber">Things to check</Label>
+                <ul className="flex flex-col gap-2">
+                  {concerns.map((c) => (
+                    <li key={c.text} className="flex items-start gap-2.5 text-[14px]"><AlertTriangle size={14} strokeWidth={2} className={cx("mt-1 shrink-0", c.severity === "warn" ? "text-amber" : "text-dim")} />{c.text}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {difficulty && (
               <div className="flex flex-wrap items-center gap-3 border-t-[0.5px] border-hairline-strong pt-5">
                 <Label>Application difficulty</Label>

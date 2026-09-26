@@ -6,7 +6,7 @@
  */
 import { decodeEntities, htmlToText } from "@/lib/domain/normalize";
 
-export type SourceKind = "greenhouse" | "lever" | "ashby" | "smartrecruiters" | "workday" | "sjsu_page";
+export type SourceKind = "greenhouse" | "lever" | "ashby" | "smartrecruiters" | "workday" | "sjsu_page" | "usajobs";
 
 export type RawPosting = {
   source: SourceKind;
@@ -19,6 +19,8 @@ export type RawPosting = {
   department: string | null;
   description: string; // plain text
   postedAt: string | null;
+  /** YYYY-MM-DD when the source states one explicitly (otherwise it is parsed from the description). */
+  deadline?: string | null;
   commitment: string | null;
   payText: string | null;
   isRemoteHint: boolean;
@@ -307,7 +309,96 @@ function payFromText(text: string): string | null {
   return m ? m[0] : null;
 }
 
+// ───────────────────────── USAJOBS (official U.S. federal jobs API) ─────────────────────────
+// https://developer.usajobs.gov — requires a free API key and the registered contact email as User-Agent.
+// Both come from the environment; without them the source is skipped (never faked).
+
+export function usajobsConfigured(env: Record<string, string | undefined> = process.env): boolean {
+  return Boolean(env.USAJOBS_API_KEY && env.USAJOBS_USER_AGENT);
+}
+
+type UsaText = string | string[] | null | undefined;
+export type UsaJobsItem = {
+  MatchedObjectId: string;
+  MatchedObjectDescriptor: {
+    PositionTitle: string;
+    PositionURI: string;
+    ApplyURI?: string[];
+    PositionLocationDisplay?: string;
+    PositionLocation?: { LocationName?: string }[];
+    OrganizationName?: string;
+    DepartmentName?: string;
+    PositionSchedule?: { Name?: string }[];
+    PositionOfferingType?: { Name?: string }[];
+    QualificationSummary?: string;
+    PositionRemuneration?: { MinimumRange?: string; MaximumRange?: string; RateIntervalCode?: string }[];
+    PublicationStartDate?: string;
+    ApplicationCloseDate?: string;
+    UserArea?: { Details?: { JobSummary?: UsaText; MajorDuties?: UsaText; Education?: UsaText; Requirements?: UsaText; Evaluations?: UsaText; RemoteIndicator?: boolean | string } };
+  };
+};
+
+const USA_STUDENT = /\b(?:intern(?:ship)?s?|student trainee|pathways|recent graduates?|co-?op|student)\b/i;
+const asText = (v: UsaText) => htmlToText(decodeEntities(Array.isArray(v) ? v.join("\n") : v ?? ""));
+const money = (n?: string) => (n ? `$${Number(n).toLocaleString("en-US")}` : null);
+const RATE: Record<string, string> = { PA: "per year", PH: "per hour", BW: "bi-weekly", PM: "per month", PD: "per day" };
+
+/** Map one USAJOBS result to a RawPosting. Returns null when it is not a student/early-career opening. */
+export function mapUsajobsItem(item: UsaJobsItem): RawPosting | null {
+  const d = item.MatchedObjectDescriptor;
+  if (!d?.PositionTitle || !d.PositionURI) return null;
+  const offering = (d.PositionOfferingType ?? []).map((o) => o.Name ?? "").join(" ");
+  if (!USA_STUDENT.test(d.PositionTitle) && !USA_STUDENT.test(offering)) return null;
+
+  const u = d.UserArea?.Details ?? {};
+  const description = [asText(u.JobSummary), asText(u.MajorDuties), asText(d.QualificationSummary), asText(u.Requirements), asText(u.Education), asText(u.Evaluations)].filter(Boolean).join("\n\n");
+  const rem = d.PositionRemuneration?.[0];
+  const payText = rem && money(rem.MinimumRange) ? `${money(rem.MinimumRange)}${rem.MaximumRange && rem.MaximumRange !== rem.MinimumRange ? `–${money(rem.MaximumRange)}` : ""} ${RATE[rem.RateIntervalCode ?? ""] ?? ""}`.trim() : null;
+  const close = d.ApplicationCloseDate?.slice(0, 10);
+  const location = d.PositionLocationDisplay ?? d.PositionLocation?.map((l) => l.LocationName).filter(Boolean).join("; ") ?? "";
+  return {
+    source: "usajobs",
+    sourceName: "USAJOBS",
+    externalId: `usajobs:${item.MatchedObjectId}`,
+    title: d.PositionTitle.trim(),
+    applyUrl: d.ApplyURI?.[0] ?? d.PositionURI,
+    sourceUrl: d.PositionURI,
+    locationText: location,
+    department: [d.OrganizationName, d.DepartmentName].filter((x, i, a) => x && a.indexOf(x) === i).join(" · ") || null,
+    description,
+    postedAt: d.PublicationStartDate ?? null,
+    deadline: close && /^\d{4}-\d{2}-\d{2}$/.test(close) ? close : null,
+    commitment: d.PositionSchedule?.[0]?.Name ?? null,
+    payText,
+    isRemoteHint: u.RemoteIndicator === true || u.RemoteIndicator === "True" || /remote/i.test(location),
+    onCampus: false,
+  };
+}
+
+async function usajobs(c: CompanyFeed): Promise<RawPosting[]> {
+  if (!usajobsConfigured()) throw new SourceError("USAJOBS is not configured (USAJOBS_API_KEY / USAJOBS_USER_AGENT)", "https://data.usajobs.gov");
+  const headers = { Host: "data.usajobs.gov", "User-Agent": process.env.USAJOBS_USER_AGENT!, "Authorization-Key": process.env.USAJOBS_API_KEY! };
+  const keywords = (c.config.keywords ?? "intern,student trainee,pathways").split(",").map((k) => k.trim()).filter(Boolean).slice(0, 4);
+  const areas: Record<string, string>[] = [{ LocationName: c.config.location ?? "San Jose, California", Radius: c.config.radius ?? "60" }, { RemoteIndicator: "True" }];
+  const out = new Map<string, RawPosting>();
+  // At most keywords × 2 areas requests, sequential with a pause: well inside USAJOBS's fair-use limits.
+  for (const keyword of keywords) {
+    for (const area of areas) {
+      const q = new URLSearchParams({ Keyword: keyword, ResultsPerPage: "250", ...area });
+      if (c.config.categories) q.set("JobCategoryCode", c.config.categories);
+      const res = await getJSON<{ SearchResult?: { SearchResultItems?: UsaJobsItem[] } }>(`https://data.usajobs.gov/api/search?${q}`, { headers });
+      for (const item of res.SearchResult?.SearchResultItems ?? []) {
+        const p = mapUsajobsItem(item);
+        if (p) out.set(p.externalId, p);
+      }
+      await new Promise((r) => setTimeout(r, 400));
+    }
+  }
+  return [...out.values()];
+}
+
 export const ADAPTERS: Record<SourceKind, (c: CompanyFeed) => Promise<RawPosting[]>> = {
+  usajobs,
   greenhouse,
   lever,
   ashby,
