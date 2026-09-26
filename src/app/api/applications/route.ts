@@ -32,6 +32,10 @@ export const POST = withUser(async ({ db, user, req }) => {
   const input = await body(req, Create);
   let row: Record<string, unknown>;
   if ("jobId" in input) {
+    // Already tracking this opportunity? Return it untouched — re-tracking must never reset a real status
+    // (an application in "interview" or "offer" going back to "saved" would silently destroy progress).
+    const { data: existing } = await db.from("applications").select("*").eq("user_id", user.id).eq("job_id", input.jobId).maybeSingle();
+    if (existing) return ok({ application: existing, existing: true });
     const { data: job } = await db
       .from("jobs")
       .select("id, title, apply_url, discovered_at, is_on_campus, city, location_text, is_remote, companies(name), job_sources(source_name, is_official)")
