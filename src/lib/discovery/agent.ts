@@ -7,6 +7,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { computeMatch, type MatchJob, type MatchProfile } from "@/lib/domain/match";
+import { normalizePrefs } from "@/lib/domain/notify-prefs";
 import { SKILLS } from "@/lib/domain/skills";
 import { archiveExpired, closeStale, normalizePosting, upsertJobs, type NormalizedJob } from "./ingest";
 import { REGISTRY } from "./registry";
@@ -86,7 +87,10 @@ export async function runDiscovery(
 
   const report: DiscoveryReport = { runId: run.id, companies: 0, failures: [], seen: 0, kept: 0, created: 0, closed: 0, archived: 0, skipped: {}, newJobIds: [] };
   try {
+    const { count: sourcesBefore } = await db.from("companies").select("id", { count: "exact", head: true }).eq("discoverable", true);
     await syncCatalog(db);
+    const { count: sourcesAfter } = await db.from("companies").select("id", { count: "exact", head: true }).eq("discoverable", true);
+    if ((sourcesAfter ?? 0) > (sourcesBefore ?? 0) && (sourcesBefore ?? 0) > 0) await notifySourceUpdate(db, (sourcesAfter ?? 0) - (sourcesBefore ?? 0), sourcesAfter ?? 0);
     const skills = await skillIdMap(db);
     let q = db.from("companies").select("id, slug, name, ats, ats_config, discoverable").eq("discoverable", true);
     if (opts.companySlugs?.length) q = q.in("slug", opts.companySlugs);
@@ -209,7 +213,7 @@ export async function loadMatchProfile(db: SupabaseClient, userId: string): Prom
 
 /** Recompute matches for one user (after profile/resume changes) or every onboarded user. */
 export async function rematchAll(db: SupabaseClient, opts: { userId?: string; newJobIds?: Set<string> } = {}) {
-  const base = db.from("profiles").select("id");
+  const base = db.from("profiles").select("id, notification_prefs");
   const { data: users, error } = await (opts.userId ? base.eq("id", opts.userId) : base.not("onboarded_at", "is", null));
   if (error) throw error;
   if (!users?.length) return;
@@ -227,14 +231,15 @@ export async function rematchAll(db: SupabaseClient, opts: { userId?: string; ne
       if (mErr) throw mErr;
     }
 
-    // Alerts for brand-new opportunities only.
-    if (opts.newJobIds?.size) {
+    // Alerts for brand-new opportunities only — and only if the student wants them, above their own threshold.
+    const prefs = normalizePrefs(u.notification_prefs);
+    if (opts.newJobIds?.size && prefs.in_app.new_matches) {
       const fresh = jobs.filter((j) => opts.newJobIds!.has(j.id));
       const scored = new Map(rows.map((r) => [r.job_id, r]));
       const { data: watch } = await db.from("company_watchlists").select("company_id").eq("user_id", u.id);
       const followed = new Set((watch ?? []).map((w) => w.company_id as string));
       const notes = fresh
-        .filter((j) => j.is_on_campus || followed.has(j.company_id) || (scored.get(j.id)?.score ?? 0) >= 70)
+        .filter((j) => j.is_on_campus || followed.has(j.company_id) || (scored.get(j.id)?.score ?? 0) >= prefs.min_match_score)
         .slice(0, 25)
         .map((j) => ({
           user_id: u.id,
@@ -252,6 +257,15 @@ export async function rematchAll(db: SupabaseClient, opts: { userId?: string; ne
       await writeDigest(db, u.id, fresh, scored);
     }
   }
+}
+
+/** Opt-in ("Source updates"): tell students who asked when FRIDAY starts checking more employers. */
+async function notifySourceUpdate(db: SupabaseClient, added: number, total: number) {
+  const { data: people } = await db.from("profiles").select("id, notification_prefs").not("onboarded_at", "is", null);
+  const rows = (people ?? [])
+    .filter((p) => normalizePrefs(p.notification_prefs).in_app.source_updates)
+    .map((p) => ({ user_id: p.id, kind: "source_update", title: `FRIDAY now checks ${added} more employer${added === 1 ? "" : "s"}`, body: `${total} employers are monitored for new internships and jobs.`, dedupe_key: `sources:${total}` }));
+  if (rows.length) await db.from("notifications").upsert(rows, { onConflict: "user_id,dedupe_key", ignoreDuplicates: true });
 }
 
 async function writeDigest(db: SupabaseClient, userId: string, fresh: JobForMatch[], scored: Map<string, { score: number }>) {
@@ -315,6 +329,14 @@ export async function raiseReminders(db: SupabaseClient) {
     return { user_id: i.user_id, kind: "interview", title: `${i.kind === "interview" ? "Interview" : i.kind} soon: ${a?.company_name ?? ""}`, body: new Date(i.scheduled_at).toLocaleString("en-US", { timeZone: "America/Los_Angeles" }), application_id: i.application_id, dedupe_key: `interview:${i.id}` };
   });
 
-  const all = [...deadlineNotes, ...followNotes, ...interviewNotes];
+  // Each kind of reminder respects the student's own notification preferences.
+  const { data: people } = await db.from("profiles").select("id, notification_prefs");
+  const prefsOf = new Map((people ?? []).map((p) => [p.id as string, normalizePrefs(p.notification_prefs)]));
+  const wants = (userId: string, key: "closing_soon" | "follow_ups" | "interviews") => prefsOf.get(userId)?.in_app[key] ?? true;
+  const all = [
+    ...deadlineNotes.filter((n) => wants(n.user_id as string, "closing_soon")),
+    ...followNotes.filter((n) => wants(n.user_id as string, "follow_ups")),
+    ...interviewNotes.filter((n) => wants(n.user_id as string, "interviews")),
+  ];
   if (all.length) await db.from("notifications").upsert(all, { onConflict: "user_id,dedupe_key", ignoreDuplicates: true });
 }

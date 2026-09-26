@@ -2,6 +2,7 @@ import { z } from "zod";
 import { body, ok, withUser } from "@/lib/api";
 import { rematchAll } from "@/lib/discovery/agent";
 import { BAY_AREA_CITIES, SJSU } from "@/lib/domain/geo";
+import { PrefsSchema } from "@/lib/domain/notify-prefs";
 import { SKILLS } from "@/lib/domain/skills";
 
 const url = z.string().url().max(300).nullish().or(z.literal("").transform(() => null));
@@ -24,6 +25,9 @@ const Patch = z.object({
   linkedin_url: url,
   portfolio_url: url,
   digest_enabled: z.boolean().optional(),
+  notification_prefs: PrefsSchema.optional(),
+  /** true = receive email; false = opted out (sets email_unsubscribed_at). */
+  email_alerts: z.boolean().optional(),
   skills: z.array(z.string()).max(80).optional(),
   onboarded: z.boolean().optional(),
 });
@@ -37,8 +41,9 @@ export const GET = withUser(async ({ db, user }) => {
 
 /** PATCH /api/profile — update profile fields and skills, then re-rank every opportunity for you. */
 export const PATCH = withUser(async ({ db, user, req }) => {
-  const { skills, origin, onboarded, ...fields } = await body(req, Patch);
+  const { skills, origin, onboarded, email_alerts, ...fields } = await body(req, Patch);
   const update: Record<string, unknown> = { ...fields };
+  if (email_alerts !== undefined) update.email_unsubscribed_at = email_alerts ? null : new Date().toISOString();
   if (origin) {
     const city = BAY_AREA_CITIES.find((c) => c.name === origin);
     Object.assign(update, city ? { origin_label: city.name, origin_lat: city.lat, origin_lng: city.lng } : { origin_label: SJSU.label, origin_lat: SJSU.lat, origin_lng: SJSU.lng });
@@ -59,6 +64,8 @@ export const PATCH = withUser(async ({ db, user, req }) => {
     if (ids.length) await db.from("profile_skills").upsert(ids.map((skill_id) => ({ user_id: user.id, skill_id, source: "manual" })), { onConflict: "user_id,skill_id", ignoreDuplicates: true });
   }
 
-  await rematchAll(db, { userId: user.id });
+  // Notification preferences don't change any match, so they skip the (expensive) re-rank.
+  const preferencesOnly = !skills && !origin && !onboarded && Object.keys(fields).every((k) => k === "notification_prefs");
+  if (!preferencesOnly) await rematchAll(db, { userId: user.id });
   return ok({ ok: true });
 });

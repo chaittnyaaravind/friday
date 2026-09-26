@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { body, HttpError, ok, withUser } from "@/lib/api";
+import { normalizePrefs } from "@/lib/domain/notify-prefs";
 import { loadProfileItems, loadTailorJob as loadJob } from "@/lib/resume/profile";
 import { buildTailored, tailorProposal } from "@/lib/resume/tailor";
 import { validateDoc } from "@/lib/resume/validate";
@@ -34,5 +35,12 @@ export const POST = withUser(async ({ db, user, req }) => {
     .select("id, label")
     .single();
   if (error) throw error;
+  // "Resume tailoring completed" — only if the student wants it (a failure here must never fail the tailoring).
+  try {
+    const { data: pf } = await db.from("profiles").select("notification_prefs").eq("id", user.id).single();
+    if (normalizePrefs(pf?.notification_prefs).in_app.resume) {
+      await db.from("notifications").upsert({ user_id: user.id, kind: "resume_tailored", title: `Tailored resume ready: ${job.company || job.title}`, body: "Review every change before you export it.", job_id: job.id, dedupe_key: `tailor:${version.id}` }, { onConflict: "user_id,dedupe_key", ignoreDuplicates: true });
+    }
+  } catch { /* the notification is a courtesy */ }
   return ok({ version }, { status: 201 });
 });
