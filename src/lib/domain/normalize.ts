@@ -38,6 +38,8 @@ export function classifyCategory(title: string, department = ""): Category | nul
 }
 
 const INTERN_RE = /\b(?:intern(?:ship)?s?|co-?op|summer (?:analyst|associate|engineer)|apprentice(?:ship)?|student (?:researcher|engineer|worker|developer))\b/i;
+/** Roles aimed at people who WERE interns ("Former Intern", "(Former Summer 2026 Interns)", "Alumni intern"). */
+const FORMER_INTERN_RE = /\b(?:former|ex|past|previous|alumni|alumnus)\W+(?:[\w']+\W+){0,4}?interns?(?:ships?)?\b/i;
 const NEW_GRAD_RE = /\b(?:new grad(?:uate)?|university grad(?:uate)?|early career|entry[- ]level|graduate (?:engineer|program))\b/i;
 const SENIOR_RE = /\b(?:senior|sr\.?|staff|principal|lead|manager|director|head of|vp|vice president|architect|distinguished|fellow)\b/i;
 const NON_TECH_RE = /\b(?:marketing|sales(?! engineer)|legal|paralegal|recruit|talent|finance|accounting|audit|payroll|hr\b|human resources|facilities|communications|public relations|event|culinary|kitchen|nurse|clinical|pharma|tax|treasury|procurement|supply chain|warehouse|driver)\b/i;
@@ -52,7 +54,9 @@ export type Relevance = {
 
 export function classifyRole(title: string, opts: { onCampus?: boolean; commitment?: string } = {}): Relevance {
   const t = title;
-  const isIntern = INTERN_RE.test(t) || /intern/i.test(opts.commitment ?? "");
+  // "Technical Program Manager - Former Intern" is a job FOR people who used to be interns, not an internship.
+  const forFormerInterns = FORMER_INTERN_RE.test(t);
+  const isIntern = !forFormerInterns && (INTERN_RE.test(t) || /intern/i.test(opts.commitment ?? ""));
   const isNewGrad = NEW_GRAD_RE.test(t);
   const isSenior = SENIOR_RE.test(t) && !isIntern;
   const isResearch = /\bresearch (?:assistant|intern|aide)\b|\blab assistant\b/i.test(t);

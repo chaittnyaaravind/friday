@@ -112,7 +112,8 @@ describe("buildSearchUrl", () => {
     expect(u.origin + u.pathname).toBe("https://api.adzuna.com/v1/api/jobs/us/search/1");
     expect(u.searchParams.get("where")).toBe("San Jose, CA");
     expect(u.searchParams.get("distance")).toBe("40"); // 25 miles
-    expect(u.searchParams.get("what_or")).toContain("intern");
+    expect(u.searchParams.get("title_only")).toBe("intern");
+    expect(u.searchParams.has("what_or")).toBe(false);
     expect(u.searchParams.get("sort_by")).toBe("date");
     expect(u.searchParams.get("results_per_page")).toBe("50");
   });
@@ -123,16 +124,16 @@ describe("provider.search — success, empty, malformed", () => {
     const f = vi.fn(async () => json({ results: [result(), result({ id: 2, title: "Data Intern" }), result({ id: 3, title: "" })] })) as unknown as typeof fetch;
     const { p, logs } = provider(f);
     const r = await p.search([area]);
-    expect(r.requests).toBe(2); // one area × two queries
-    expect(r.succeeded).toBe(2);
+    expect(r.requests).toBe(QUERIES.length); // one area × every query
+    expect(r.succeeded).toBe(QUERIES.length);
     expect(r.postings.map((x) => x.externalId).sort()).toEqual(["adzuna:2", "adzuna:4900000001"]);
-    expect(r.rejected).toBe(2); // the title-less result, once per query
+    expect(r.rejected).toBe(QUERIES.length); // the title-less result, once per query
     expect(logs.every((l) => l.ok === true)).toBe(true);
   });
   it("an empty response is success with no postings — nothing is invented", async () => {
     const { p } = provider(vi.fn(async () => json({ results: [] })) as unknown as typeof fetch);
     const r = await p.search([area]);
-    expect(r).toMatchObject({ postings: [], succeeded: 2, failed: 0 });
+    expect(r).toMatchObject({ postings: [], succeeded: QUERIES.length, failed: 0 });
   });
   it("a malformed body is a failed request, and with nothing else fetched the search fails", async () => {
     const { p } = provider(vi.fn(async () => json({ nope: true })) as unknown as typeof fetch);
@@ -140,12 +141,12 @@ describe("provider.search — success, empty, malformed", () => {
     const { p: p2 } = provider(vi.fn(async () => new Response("<html>oops</html>", { status: 200 })) as unknown as typeof fetch);
     await expect(p2.search([area])).rejects.toBeInstanceOf(AdzunaError);
   });
-  it("partial success returns what it got: one query failing does not lose the other", async () => {
+  it("partial success returns what it got: some queries failing does not lose the one that worked", async () => {
     let n = 0;
     const f = vi.fn(async () => (++n === 1 ? json({ results: [result()] }) : json({ error: "x" }, 400))) as unknown as typeof fetch;
     const { p } = provider(f);
     const r = await p.search([area]);
-    expect(r).toMatchObject({ succeeded: 1, failed: 1 });
+    expect(r).toMatchObject({ succeeded: 1, failed: QUERIES.length - 1 });
     expect(r.postings).toHaveLength(1);
   });
 });
@@ -165,15 +166,15 @@ describe("provider.search — errors, rate limits, timeouts, credentials", () =>
     const f = vi.fn(async () => json({}, 429)) as unknown as typeof fetch;
     const { p } = provider(f);
     await expect(p.search([area])).rejects.toThrow(/429/);
-    expect((f as unknown as ReturnType<typeof vi.fn>).mock.calls.length).toBe(3 * 2); // (1 try + 2 retries) × 2 queries
+    expect((f as unknown as ReturnType<typeof vi.fn>).mock.calls.length).toBe(3 * QUERIES.length); // (1 try + 2 retries) × every query
   });
   it("a server error is retried; a client error is not", async () => {
     const f5 = vi.fn(async () => json({}, 503)) as unknown as typeof fetch;
     await expect(provider(f5).p.search([area])).rejects.toThrow(/503/);
-    expect((f5 as unknown as ReturnType<typeof vi.fn>).mock.calls.length).toBe(6);
+    expect((f5 as unknown as ReturnType<typeof vi.fn>).mock.calls.length).toBe(3 * QUERIES.length);
     const f4 = vi.fn(async () => json({}, 400)) as unknown as typeof fetch;
     await expect(provider(f4).p.search([area])).rejects.toThrow(/400/);
-    expect((f4 as unknown as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2);
+    expect((f4 as unknown as ReturnType<typeof vi.fn>).mock.calls.length).toBe(QUERIES.length);
   });
   it("a timeout is a retryable failure with a clear message", async () => {
     const f = vi.fn(async () => { throw Object.assign(new Error("aborted"), { name: "TimeoutError" }); }) as unknown as typeof fetch;

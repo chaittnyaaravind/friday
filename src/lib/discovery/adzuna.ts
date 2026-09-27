@@ -2,8 +2,8 @@
  * Adzuna — https://developer.adzuna.com. Server-side only: credentials come from the environment and never reach
  * the browser or the logs. Without them the provider reports itself unconfigured and returns nothing (no fake jobs).
  *
- * Budget: each area is searched with at most two queries (internships, new-grad/entry-level), page 1 of 50 results,
- * capped by ADZUNA_MAX_REQUESTS per sync (default 8) — a few dozen calls a day at the 3-hour cadence.
+ * Budget: each area is searched with four title queries (intern, internship, entry level, new grad), page 1 of 50 results,
+ * capped by ADZUNA_MAX_REQUESTS per sync (default 8 = two areas) — about 32 calls a day per area at the 3-hour cadence.
  */
 import "server-only";
 import { decodeEntities, htmlToText } from "@/lib/domain/normalize";
@@ -88,10 +88,17 @@ export function mapAdzunaResult(r: AdzunaResult): RawPosting | null {
 
 // ── requests ───────────────────────────────────────────────────────────────────────────────────
 
-export type AdzunaQuery = { id: "internships" | "entry_level"; what_or: string; category?: string; maxDaysOld: number };
+/**
+ * `title_only` requires ALL the words to be in the job title, which is what we want: measured against the live API,
+ * `what_or "intern internship co-op"` returned 12 student-titled roles per 50, while `title_only "intern"` returns 48.
+ * Adzuna does not stem, so "intern" and "internship" are separate queries (0 results overlap).
+ */
+export type AdzunaQuery = { id: "intern" | "internship" | "entry_level" | "new_grad"; title_only: string; category?: string; maxDaysOld: number };
 export const QUERIES: AdzunaQuery[] = [
-  { id: "internships", what_or: "intern internship co-op", category: "it-jobs", maxDaysOld: 30 },
-  { id: "entry_level", what_or: "new grad entry level junior associate graduate", category: "it-jobs", maxDaysOld: 30 },
+  { id: "intern", title_only: "intern", category: "it-jobs", maxDaysOld: 30 },
+  { id: "internship", title_only: "internship", category: "it-jobs", maxDaysOld: 30 },
+  { id: "entry_level", title_only: "entry level", category: "it-jobs", maxDaysOld: 30 },
+  { id: "new_grad", title_only: "new grad", category: "it-jobs", maxDaysOld: 30 },
 ];
 
 /** The request URL. It carries the credentials, so it must never be logged. */
@@ -100,7 +107,7 @@ export function buildSearchUrl(cfg: AdzunaConfig, area: SearchArea, q: AdzunaQue
     app_id: cfg.appId,
     app_key: cfg.appKey,
     results_per_page: String(perPage),
-    what_or: q.what_or,
+    title_only: q.title_only,
     where: areaLabel(area),
     distance: String(milesToKm(area.radiusMiles)), // Adzuna's distance is in kilometres
     max_days_old: String(q.maxDaysOld),

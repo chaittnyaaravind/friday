@@ -46,6 +46,15 @@ describe("normalize", () => {
   it("classifies roles", () => {
     expect(classifyRole("Software Engineering Intern (Summer 2027)").employmentType).toBe("internship");
     expect(classifyRole("Senior Software Engineer").isSenior).toBe(true);
+    // A job for people who USED to be interns is not an internship (found in live Adzuna data).
+    for (const t of ["Technical Program Manager 1 - Former Intern", "Technical Program Manager II (Former Summer 2026 Interns)", "Engineer, Alumni Intern Program Graduate", "Ex-intern Software Engineer"]) {
+      const r = classifyRole(t);
+      expect(r.employmentType, t).not.toBe("internship");
+      expect(r.isStudentRole && !r.isSenior && r.employmentType === "internship", t).toBe(false);
+    }
+    expect(classifyRole("Technical Program Manager - Former Intern").isSenior).toBe(true); // manager, no longer shielded as an intern
+    // real internships are unaffected
+    for (const t of ["Software Engineer Intern", "Software Engineering Internship - Summer 2027", "Machine Learning Intern (Former Employees Welcome)"]) expect(classifyRole(t).employmentType, t).toBe("internship");
     expect(classifyRole("Marketing Intern").isTechnical).toBe(false);
     expect(classifyRole("Lab Assistant", { onCampus: true }).employmentType).toBe("on_campus");
     expect(classifyCategory("Machine Learning Intern")).toBe("AI/ML");
