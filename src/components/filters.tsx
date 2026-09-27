@@ -71,6 +71,8 @@ export function Filters({ preset = {}, total }: { preset?: Preset; total: number
           TYPES.map((t) => (
             <Pill key={t.l} on={(sp.get("type") ?? "") === t.v} onClick={() => set({ type: t.v || null })}>{t.l}</Pill>
           ))}
+        <Pill on={(sp.get("level") ?? "").split(",").includes("new_grad")} onClick={() => set({ level: sp.get("level") === "new_grad" ? null : "new_grad" })}>New grad</Pill>
+        <Pill on={(sp.get("level") ?? "").split(",").includes("entry")} onClick={() => set({ level: sp.get("level") === "entry" ? null : "entry" })}>Entry level</Pill>
         <Pill on={sp.get("remote") === "1"} onClick={() => toggle("remote")}>Remote</Pill>
         <Pill on={sp.get("hybrid") === "1"} onClick={() => toggle("hybrid")}>Hybrid</Pill>
         <Pill on={sp.get("saved") === "1"} onClick={() => toggle("saved")}>Saved</Pill>
@@ -87,7 +89,8 @@ export function Filters({ preset = {}, total }: { preset?: Preset; total: number
             <option value="5">Within 5 miles</option>
             <option value="10">Within 10 miles</option>
             <option value="25">Within 25 miles</option>
-            <option value="45">Anywhere in Silicon Valley</option>
+            <option value="50">Within 50 miles</option>
+            <option value="100">Within 100 miles</option>
           </Sel>
           {!preset.hideCategory && (
             <Sel label="Category" value={sp.get("category") ?? ""} onChange={(v) => set({ category: v || null })}>
@@ -100,8 +103,9 @@ export function Filters({ preset = {}, total }: { preset?: Preset; total: number
           <Sel label="Date posted" value={sp.get("posted") ?? ""} onChange={(v) => set({ posted: v || null })}>
             <option value="">Any time</option>
             <option value="1">Last 24 hours</option>
-            <option value="7">This week</option>
-            <option value="30">This month</option>
+            <option value="3">Last 3 days</option>
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
           </Sel>
           <Sel label="Deadline" value={sp.get("deadline") ?? ""} onChange={(v) => set({ deadline: v || null })}>
             <option value="">Any deadline</option>
@@ -111,9 +115,11 @@ export function Filters({ preset = {}, total }: { preset?: Preset; total: number
           <Sel label="Source" value={sp.get("source") ?? ""} onChange={(v) => set({ source: v || null })}>
             <option value="">All sources</option>
             <option value="sjsu_page">Official SJSU pages</option>
+            <option value="adzuna">Adzuna (found by FRIDAY)</option>
             <option value="workday,greenhouse,lever,ashby,smartrecruiters">Company career sites</option>
-            <option value="handshake_import">Handshake (imported)</option>
-            <option value="linkedin_import,indeed_import">LinkedIn / Indeed (imported)</option>
+            <option value="handshake_import">Handshake (imported by you)</option>
+            <option value="linkedin_import,indeed_import">LinkedIn / Indeed (imported by you)</option>
+            <option value="manual">Added by you</option>
           </Sel>
           <Sel label="Skill" value={sp.get("skills") ?? ""} onChange={(v) => set({ skills: v || null })}>
             <option value="">Any skill</option>

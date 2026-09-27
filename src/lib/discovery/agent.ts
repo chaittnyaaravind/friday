@@ -9,7 +9,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { computeMatch, type MatchJob, type MatchProfile } from "@/lib/domain/match";
 import { normalizePrefs } from "@/lib/domain/notify-prefs";
 import { SKILLS } from "@/lib/domain/skills";
+import { adzunaProvider } from "./adzuna";
+import { syncProvider } from "./aggregate";
 import { archiveExpired, closeStale, normalizePosting, upsertJobs, type NormalizedJob } from "./ingest";
+import type { ProviderMetrics } from "./providers";
 import { REGISTRY } from "./registry";
 import { ADAPTERS, usajobsConfigured, type CompanyFeed, type SourceKind } from "./sources";
 
@@ -69,6 +72,8 @@ export type DiscoveryReport = {
   closed: number;
   /** Active listings no source confirmed for ARCHIVE_DAYS, marked expired this run. */
   archived: number;
+  /** Per-provider numbers for aggregator sources (Adzuna): requests, fetched, inserted, deduplicated, errors. */
+  providers: Record<string, ProviderMetrics>;
   skipped: Record<string, number>;
   newJobIds: string[];
 };
@@ -85,7 +90,7 @@ export async function runDiscovery(
     .single();
   if (runErr) throw runErr;
 
-  const report: DiscoveryReport = { runId: run.id, companies: 0, failures: [], seen: 0, kept: 0, created: 0, closed: 0, archived: 0, skipped: {}, newJobIds: [] };
+  const report: DiscoveryReport = { runId: run.id, companies: 0, failures: [], seen: 0, kept: 0, created: 0, closed: 0, archived: 0, providers: {}, skipped: {}, newJobIds: [] };
   try {
     const { count: sourcesBefore } = await db.from("companies").select("id", { count: "exact", head: true }).eq("discoverable", true);
     await syncCatalog(db);
@@ -100,6 +105,24 @@ export async function runDiscovery(
     report.companies = companies?.length ?? 0;
 
     await pool((companies ?? []) as CompanyRow[], 4, async (c) => {
+      // Aggregators return postings for many employers, so they run through the shared provider pipeline.
+      // A provider that is unconfigured is skipped; one that fails is recorded — neither stops the other sources.
+      if (c.ats === "adzuna") {
+        const { metrics, createdIds } = await syncProvider(db, adzunaProvider, skills);
+        report.providers.adzuna = metrics;
+        if (!metrics.configured) {
+          report.skipped["adzuna-not-configured"] = 1;
+          report.companies -= 1;
+          return;
+        }
+        report.seen += metrics.fetched;
+        report.kept += metrics.normalized;
+        report.created += createdIds.length;
+        report.newJobIds.push(...createdIds);
+        if (!metrics.ok) report.failures.push({ company: "adzuna", error: metrics.error ?? "Adzuna failed" });
+        await db.from("companies").update({ last_crawled_at: new Date().toISOString() }).eq("id", c.id);
+        return;
+      }
       const adapter = ADAPTERS[c.ats as SourceKind];
       if (!adapter) return;
       // A credentialed source without credentials is reported as skipped, not as a failure, and never faked.

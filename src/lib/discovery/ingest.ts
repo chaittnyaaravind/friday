@@ -11,6 +11,7 @@ import { isAuthRestricted } from "@/lib/domain/match";
 import { extractRequirements } from "@/lib/domain/requirements";
 import { skillBySlug } from "@/lib/domain/skills";
 import { privateCanonical, privateCompanySlug, privateExternalId } from "./import-scope";
+import { AGGREGATOR_SOURCES } from "./providers";
 import type { RawPosting } from "./sources";
 
 export type NormalizedJob = {
@@ -69,7 +70,7 @@ export function normalizePosting(p: RawPosting, company: { id: string; slug: str
       last_verified_at: new Date().toISOString(),
       status: "active",
       apply_url: p.applyUrl,
-      apply_url_is_official: true,
+      apply_url_is_official: !AGGREGATOR_SOURCES.has(p.source), // an aggregator's link is not the employer's own
       auth_restricted: isAuthRestricted(text),
     },
   };
@@ -120,7 +121,7 @@ export async function upsertJobs(
     source_name: j.posting.sourceName,
     external_id: j.posting.externalId,
     url: j.posting.sourceUrl,
-    is_official: true,
+    is_official: !AGGREGATOR_SOURCES.has(j.posting.source),
     last_seen_at: now,
   }));
   const { error: srcErr } = await db.from("job_sources").upsert(sources, { onConflict: "source,external_id" });

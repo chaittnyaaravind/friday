@@ -4,6 +4,7 @@ import { ProfileForm } from "@/components/profile-form";
 import { Card, Label, PageHeader } from "@/components/ui";
 import { isAiConfigured } from "@/lib/ai/client";
 import { loadProfileValues } from "@/lib/data/profile";
+import { adzunaConfigured } from "@/lib/discovery/adzuna";
 import { usajobsConfigured } from "@/lib/discovery/sources";
 import { normalizePrefs } from "@/lib/domain/notify-prefs";
 import { emailStatus } from "@/lib/email/send";
@@ -22,6 +23,7 @@ export default async function Settings() {
     { label: "FRIDAY AI (resume parsing, tailoring, chat)", ok: isAiConfigured(), off: "No free AI key set (GROQ_API_KEY, GEMINI_API_KEY or OPENROUTER_API_KEY) — AI features are off; matching and FRIDAY Local still work." },
     { label: "Daily schedule", ok: Boolean(process.env.CRON_SECRET), off: "CRON_SECRET missing — the morning run can't authenticate." },
     { label: "Email alerts", ok: email.configured, off: `Not configured — missing ${email.missing.join(" and ")}. In-app notifications work; no email is sent.` },
+    { label: "Adzuna job search", ok: adzunaConfigured(), off: "Not configured — add ADZUNA_APP_ID and ADZUNA_APP_KEY to find jobs automatically beyond employer career pages. Employers and SJSU pages still work." },
     { label: "USAJOBS federal internships", ok: usajobsConfigured(), off: "Not configured — add USAJOBS_API_KEY and USAJOBS_USER_AGENT to include federal internships and Pathways roles." },
   ];
   return (

@@ -181,6 +181,9 @@ export const REGISTRY: RegistryCompany[] = [
   // ── U.S. federal internships and Pathways roles via the official USAJOBS API (needs USAJOBS_API_KEY + USAJOBS_USER_AGENT) ──
   { slug: "usajobs", name: "U.S. Federal Government (USAJOBS)", domain: "usajobs.gov", hqCity: "Washington", industry: "Government", ats: "usajobs", careersUrl: "https://www.usajobs.gov", config: { keywords: "intern,student trainee,pathways", location: "San Jose, California", radius: "60" } },
 
+  // ── Adzuna job-search API (aggregator; needs ADZUNA_APP_ID + ADZUNA_APP_KEY). Each posting names its own employer. ──
+  { slug: "adzuna", name: "Adzuna", domain: "adzuna.com", hqCity: "London", industry: "Job board", ats: "adzuna", careersUrl: "https://www.adzuna.com" },
+
   // ── SJSU official hiring pages (on-campus) ──
   sjsu("sjsu-associated-students", "SJSU Associated Students", "https://www.sjsu.edu/as/jobs/index.php", "Associated Students"),
   sjsu("sjsu-library", "SJSU King Library", "https://library.sjsu.edu/employment/employment-opportunities/", "King Library"),

@@ -11,6 +11,9 @@ export function JobCard({ job }: { job: JobListItem }) {
   const dl = deadlineLabel(job.deadline);
   // The feed only lists active jobs, so this reflects how recently a source confirmed it.
   const fresh = freshnessOf({ status: "active", discovered_at: job.discovered_at, last_verified_at: job.last_verified_at, deadline: job.deadline });
+  // Where a listing came from, stated plainly: the student's own import, or an aggregator with no employer feed behind it.
+  const imported = job.sources.some((s) => /_import$/.test(s.source) || s.source === "manual");
+  const viaAdzuna = !imported && !job.sources.some((s) => s.official) && job.sources.some((s) => s.source === "adzuna");
   const strongSkills = (job.strong ?? []).filter((r) => r.kind === "skill").slice(0, 3);
   const missing = (job.missing ?? []).filter((m) => m.kind === "required").slice(0, 2);
   const official = job.sources.find((s) => s.official) ?? job.sources[0];
@@ -52,6 +55,8 @@ export function JobCard({ job }: { job: JobListItem }) {
           <div className="flex min-w-0 flex-col gap-1">
             <div className="flex flex-wrap items-center gap-1.5">
               {fresh.state !== "active" && <Chip tone={fresh.state === "new" || fresh.state === "recent" ? "moss" : "amber"}>{fresh.label}</Chip>}
+              {imported && <Chip tone="accent">Imported by you</Chip>}
+              {viaAdzuna && <Chip>via Adzuna</Chip>}
               <span className="label">{TYPE_LABEL[job.employment_type]}</span>
               {job.category && job.category !== "Campus" && <span className="label">· {job.category}</span>}
               {job.work_study !== "unknown" && job.work_study !== "not_required" && <span className="label !text-amber">· Work-study {job.work_study}</span>}

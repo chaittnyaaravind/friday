@@ -1,11 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ProfileValues } from "@/components/profile-form";
+import { areaFromProfile, type SearchArea } from "@/lib/domain/search-area";
 
-/** Where the student is searching: their origin city (SJSU campus → San Jose) and radius, for links to other job sites. */
-export async function loadSearchArea(db: SupabaseClient, userId: string): Promise<{ city: string; radiusMiles: number }> {
-  const { data: p } = await db.from("profiles").select("origin_label, radius_miles").eq("id", userId).single();
-  const label: string = p?.origin_label ?? "SJSU Campus";
-  return { city: /sjsu|san jos/i.test(label) ? "San Jose" : label, radiusMiles: p?.radius_miles ?? 25 };
+/** Where the student is searching, from the profile FRIDAY already stores (see lib/domain/search-area). */
+export async function loadSearchArea(db: SupabaseClient, userId: string): Promise<SearchArea> {
+  const { data: p } = await db.from("profiles").select("origin_label, origin_lat, origin_lng, radius_miles, workplace").eq("id", userId).single();
+  return areaFromProfile(p);
 }
 
 /** Load the signed-in user's profile in the shape the profile form edits. */

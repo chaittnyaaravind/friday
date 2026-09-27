@@ -6,7 +6,7 @@
  */
 import { decodeEntities, htmlToText } from "@/lib/domain/normalize";
 
-export type SourceKind = "greenhouse" | "lever" | "ashby" | "smartrecruiters" | "workday" | "sjsu_page" | "usajobs";
+export type SourceKind = "greenhouse" | "lever" | "ashby" | "smartrecruiters" | "workday" | "sjsu_page" | "usajobs" | "adzuna";
 
 export type RawPosting = {
   source: SourceKind;
@@ -21,6 +21,8 @@ export type RawPosting = {
   postedAt: string | null;
   /** YYYY-MM-DD when the source states one explicitly (otherwise it is parsed from the description). */
   deadline?: string | null;
+  /** The employer's own name, for aggregators where each posting names a different one (see providers.ts). */
+  employer?: string;
   commitment: string | null;
   payText: string | null;
   isRemoteHint: boolean;
@@ -397,7 +399,8 @@ async function usajobs(c: CompanyFeed): Promise<RawPosting[]> {
   return [...out.values()];
 }
 
-export const ADAPTERS: Record<SourceKind, (c: CompanyFeed) => Promise<RawPosting[]>> = {
+// Aggregators (adzuna) are not per-company feeds: they run through the provider pipeline in agent.ts.
+export const ADAPTERS: Partial<Record<SourceKind, (c: CompanyFeed) => Promise<RawPosting[]>>> = {
   usajobs,
   greenhouse,
   lever,

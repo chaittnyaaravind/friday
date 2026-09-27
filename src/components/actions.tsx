@@ -110,7 +110,7 @@ export function FollowButton({ companyId, following: initial }: { companyId: str
 }
 
 /** "Run FRIDAY now" — triggers discovery and reports honestly (including throttling / missing keys). */
-export function RunAgentButton({ scope = "all", label = "Run FRIDAY now" }: { scope?: "all" | "sjsu" | "watchlist"; label?: string }) {
+export function RunAgentButton({ scope = "all", label = "Run FRIDAY now", city }: { scope?: "all" | "sjsu" | "watchlist"; label?: string; city?: string }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [busy, setBusy] = useState(false);
@@ -122,10 +122,18 @@ export function RunAgentButton({ scope = "all", label = "Run FRIDAY now" }: { sc
         disabled={busy || pending}
         onClick={async () => {
           setBusy(true);
-          setMsg("Searching official sources… this takes about a minute.");
+          setMsg(`Finding jobs${city ? ` near ${city}` : ""}… this takes about a minute.`);
           try {
-            const r = await api<{ companies: number; kept: number; newJobs: number; closed: number; failures: unknown[] }>("/api/agent/search", { method: "POST", json: { scope } });
-            setMsg(`Checked ${r.companies} sources · ${r.newJobs} new · ${r.closed} closed${r.failures.length ? ` · ${r.failures.length} unavailable` : ""}`);
+            const r = await api<{ companies: number; kept: number; newJobs: number; closed: number; failures: { company: string }[]; providers?: Record<string, { attempted: boolean; ok: boolean }> }>("/api/agent/search", { method: "POST", json: { scope } });
+            const adzunaDown = Boolean(r.providers?.adzuna?.attempted && !r.providers.adzuna.ok);
+            const others = r.failures.filter((f) => f.company !== "adzuna").length;
+            setMsg(
+              [
+                `${r.newJobs} new job${r.newJobs === 1 ? "" : "s"} found · ${r.companies} sources checked${r.closed ? ` · ${r.closed} closed` : ""}`,
+                adzunaDown ? "Adzuna is temporarily unavailable. Your other job sources are still working." : null,
+                others ? `${others} other source${others === 1 ? "" : "s"} unavailable` : null,
+              ].filter(Boolean).join(" — "),
+            );
             startTransition(() => router.refresh());
           } catch (e) {
             setMsg((e as Error).message);

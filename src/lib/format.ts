@@ -22,6 +22,7 @@ export const SOURCE_LABEL: Record<string, string> = {
   linkedin_import: "LinkedIn (imported)",
   indeed_import: "Indeed (imported)",
   manual: "Added by you",
+  adzuna: "Adzuna",
 };
 
 export const STATUS_LABEL: Record<string, string> = {
