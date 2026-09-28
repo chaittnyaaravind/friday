@@ -1,13 +1,13 @@
 "use client";
 
-import { Copy, GitCompare, History, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { Copy, GitCompare, History, Loader2, Pencil, Plus, Star, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { api } from "../actions";
 import { Button, Card, Chip, Input, cx } from "../ui";
 
-export type VersionRow = { id: string; label: string; kind: "base" | "tailored" | "copy" | "legacy"; when: string; job: string | null; copied: boolean };
+export type VersionRow = { id: string; label: string; kind: "base" | "tailored" | "copy" | "legacy"; when: string; job: string | null; copied: boolean; master: boolean };
 
 const KIND: Record<VersionRow["kind"], string> = { base: "From profile", tailored: "Tailored", copy: "Copy", legacy: "Legacy · read-only" };
 
@@ -79,12 +79,20 @@ export function VersionList({ versions }: { versions: VersionRow[] }) {
               {renaming === v.id ? (
                 <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} onBlur={() => rename(v)} onKeyDown={(e) => { if (e.key === "Enter") rename(v); if (e.key === "Escape") setRenaming(null); }} className="h-8 text-[14px]" aria-label="New name" />
               ) : (
-                <Link href={`/resume/${v.id}`} className="truncate text-[14.5px] hover:text-accent">{v.label}</Link>
+                <span className="flex min-w-0 items-center gap-2">
+                  <Link href={`/resume/${v.id}`} className="truncate text-[14.5px] hover:text-accent">{v.label}</Link>
+                  {v.master && <Chip tone="accent">Master</Chip>}
+                </span>
               )}
               <span className="text-[12px] text-dim">{KIND[v.kind]}{v.job ? ` · ${v.job}` : ""}{v.copied ? " · copied from an earlier version" : ""} · {v.when}</span>
             </div>
             {v.kind === "legacy" ? <Chip tone="amber">legacy</Chip> : (
               <div className={cx("flex items-center gap-0.5", busy === v.id && "pointer-events-none opacity-50")}>
+                {v.kind === "base" && (
+                  <Icon label={v.master ? "Stop using as my master resume" : "Make this my master resume"} onClick={() => act(v.id, () => api(`/api/resumes/versions/${v.id}/master`, { method: v.master ? "DELETE" : "POST" }))}>
+                    <Star size={13} className={v.master ? "fill-current text-accent" : ""} />
+                  </Icon>
+                )}
                 <Icon label="Rename" onClick={() => { setRenaming(v.id); setName(v.label); }}><Pencil size={13} /></Icon>
                 <Icon label="Duplicate" onClick={() => act(v.id, () => api(`/api/resumes/versions/${v.id}`, { method: "POST", json: { action: "duplicate" } }))}><Copy size={13} /></Icon>
                 <Icon label="Restore as a new version" onClick={() => act(v.id, () => api(`/api/resumes/versions/${v.id}`, { method: "POST", json: { action: "restore" } }))}><History size={13} /></Icon>

@@ -21,7 +21,7 @@ export type App = {
 };
 
 const ACTIVE: AppStatus[] = ["saved", "preparing", "ready", "applied", "assessment", "interview", "final_round", "offer"];
-const CLOSED: AppStatus[] = ["rejected", "withdrawn"];
+const CLOSED: AppStatus[] = ["rejected", "withdrawn", "closed"];
 
 export function Board({ initial, versions }: { initial: App[]; versions: { id: string; label: string }[] }) {
   const router = useRouter();

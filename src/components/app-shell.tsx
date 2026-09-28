@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  Bell, Briefcase, Building2, CalendarDays, Compass, FileText, GraduationCap, LayoutGrid, ListChecks, Menu, MessageSquare, Moon, Settings, Sun, SunMoon, X,
+  Bell, Briefcase, Building2, CalendarDays, Compass, FileText, GraduationCap, LayoutGrid, ListChecks, Menu, MessageSquare, Moon, Radar, Settings, Sun, SunMoon, X,
 } from "lucide-react";
 import Link from "next/link";
 import { SessionGuard } from "./session-guard";
@@ -13,6 +13,7 @@ import { cx } from "./ui";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
+  { href: "/hunt", label: "Hunt", icon: Radar },
   { href: "/discover", label: "Discover", icon: Compass },
   { href: "/sjsu", label: "SJSU Jobs", icon: GraduationCap },
   { href: "/internships", label: "Internships", icon: Briefcase },

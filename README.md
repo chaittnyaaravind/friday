@@ -28,6 +28,17 @@ DISCOVER → FILTER → DEDUPLICATE → VERIFY → MATCH → ANALYZE → TAILOR 
 
 **FRIDAY never** submits an application, marks one "Applied", solves CAPTCHAs, bypasses MFA/anti-bot systems, creates accounts, or adds experience to a resume.
 
+## Hunt engine (what each claim means)
+
+- **"Opened" = first seen by FRIDAY**, not the employer's posting date. Jobs found on an employer's first crawl are marked baseline and are never "just opened". Windows: 15 m / 1 h / 6 h / 24 h / today (Pacific).
+- **Nothing is called real-time.** Each source's cadence, the fields it provides and when it was last observed live are in `src/lib/discovery/capabilities.ts` (`realtimeVerifiedAt` is null everywhere). Discovery runs on GitHub Actions every 3 hours (best effort) plus one daily Vercel cron; every source shows "checked N min ago" from `source_health`.
+- **Listings are closed only on evidence**: an empty feed, or one that would close over half a source's listings at once, closes nothing (`close-guard.ts`). Every new / updated / closed / reopened / expired change is a row in `job_events`.
+- **Match** = a 100-point breakdown (skills 60, role 15, profile 10, location 15) plus a separate **eligibility** verdict (clear / verify / blocked). Eligibility is informational; verify with the employer or SJSU ISSS.
+- **Resume Lab**: tailoring only inserts a new version plus a permanent report (`tailoring_reports`); ATS spelling changes are limited to a reviewed whitelist (nodejs → Node.js) and never add a skill.
+- **Application packet** (`/applications/:id/packet`): FRIDAY assembles resume + cover letter + answers, shows exactly what would be sent, and hands you the official link only after you approve *that exact content* (a sha256 of it). Any change, a closed listing or a passed deadline voids the approval. FRIDAY submits nothing (`src/lib/apply/policy.ts`).
+
+Tests: `npm test` (unit, integration, render — uses recorded fixtures in `test/fixtures/sources`); `npm run test:live` probes the live SJSU pages and is not part of CI.
+
 ## Setup
 
 ```bash

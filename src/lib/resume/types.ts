@@ -87,7 +87,14 @@ export type Origin = "profile" | "user" | "ai";
  */
 export type AiTrace = { basis: string; op: string; at: string; /** server signature over (user, text, basis) — see lib/ai/sign.ts */ sig?: string };
 
-export type DocLine = { id: string; text: string; origin: Origin; sourceItemId: string | null; ai?: AiTrace };
+/**
+ * An ATS terminology change: the line names a skill the student already lists, and FRIDAY rewrote its SPELLING to the one the
+ * job uses ("JS" → "JavaScript"). It is recorded so the truth check can undo it: the ORIGINAL spelling is what the evidence
+ * must support, and both spellings must be the same skill in the taxonomy. It never adds a skill.
+ */
+export type TermChange = { from: string; to: string };
+
+export type DocLine = { id: string; text: string; origin: Origin; sourceItemId: string | null; ai?: AiTrace; terms?: TermChange[] };
 
 export type DocEntry = {
   id: string;

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import type { TailorProposal } from "@/lib/resume/tailor";
+import type { TermChangeRecord } from "@/lib/resume/terminology";
 import { api } from "../actions";
 import { Button, Card, Chip, Label, Notice, cx } from "../ui";
 
@@ -14,7 +15,7 @@ type Ranked = TailorProposal["relevant"]["experience"];
  * The transparent "FRIDAY wants to make these changes" screen. Nothing is created until
  * you accept; missing requirements are shown to you but never written onto the resume.
  */
-export function TailorReview({ proposal: p }: { proposal: TailorProposal }) {
+export function TailorReview({ proposal: p, terminology = [] }: { proposal: TailorProposal; terminology?: TermChangeRecord[] }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [exclude, setExclude] = useState<Set<string>>(new Set(p.options.exclude));
@@ -100,6 +101,17 @@ export function TailorReview({ proposal: p }: { proposal: TailorProposal }) {
               </div>
             ))}
             <p className="text-[12px] text-dim">Capitalization and punctuation only — no words added.</p>
+          </Group>
+        )}
+        {!!terminology.length && (
+          <Group tag="ATS spelling" tone="neutral">
+            {terminology.map((t, i) => (
+              <div key={i} className="flex flex-col gap-0.5 text-[13.5px]">
+                <span><span className="text-dim line-through decoration-[0.5px]">{t.from}</span> → {t.to} <span className="text-[12px] text-dim">{t.where}</span></span>
+                <span className="text-[12.5px] text-muted">{t.after}</span>
+              </div>
+            ))}
+            <p className="text-[12px] text-dim">Same skill, spelled the way the posting spells it. None adds a skill you didn&rsquo;t already list.</p>
           </Group>
         )}
         {!!p.changes.notIncluded.length && (

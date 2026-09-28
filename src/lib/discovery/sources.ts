@@ -4,9 +4,10 @@
  * no scraping of sites whose terms forbid it (LinkedIn, Indeed, Handshake are
  * user-import only). Requests identify FRIDAY and run with low concurrency.
  */
+import { todayISODate } from "@/lib/domain/hunt";
 import { decodeEntities, htmlToText } from "@/lib/domain/normalize";
 
-export type SourceKind = "greenhouse" | "lever" | "ashby" | "smartrecruiters" | "workday" | "sjsu_page" | "usajobs" | "adzuna";
+export type SourceKind = "greenhouse" | "lever" | "ashby" | "smartrecruiters" | "workday" | "pinpoint" | "sjsu_page" | "usajobs" | "adzuna";
 
 export type RawPosting = {
   source: SourceKind;
@@ -27,6 +28,12 @@ export type RawPosting = {
   payText: string | null;
   isRemoteHint: boolean;
   onCampus: boolean;
+  /**
+   * Source-specific raw values kept verbatim for audit (e.g. Workday's `startDate` and its "Posted 30+ Days Ago" text).
+   * They are data, never a business rule: nothing derives freshness or eligibility from them until the source's
+   * meaning is verified (see capabilities.ts).
+   */
+  sourceFields?: Record<string, string | null>;
 };
 
 export type CompanyFeed = {
@@ -57,6 +64,21 @@ export class SourceError extends Error {
   }
 }
 
+const has = (v: unknown): v is string => typeof v === "string" && v.trim().length > 0;
+
+/**
+ * Fail-safe shape check at the adapter boundary. Feeds are external and can change without notice. If the payload is
+ * not the list we assumed, or items exist but NONE has the fields we rely on, the adapter throws: the run records a
+ * failure and closes nothing. Returning an empty "success" instead would look like "every posting was removed".
+ * Individual postings missing a required field are dropped.
+ */
+export function usable<T>(items: unknown, isUsable: (x: T) => boolean, what: string, url: string): T[] {
+  if (!Array.isArray(items)) throw new SourceError(`unexpected payload: ${what} is not a list`, url);
+  const ok = (items as T[]).filter((x) => x != null && typeof x === "object" && isUsable(x));
+  if (items.length > 0 && ok.length === 0) throw new SourceError(`unexpected payload: none of ${items.length} ${what} had the expected fields`, url);
+  return ok;
+}
+
 /** Cheap title pre-filter so we only pull full descriptions for plausible student roles. */
 export const STUDENT_TITLE = /\b(?:intern(?:ship)?s?|co-?op|new grad(?:uate)?|university grad(?:uate)?|early career|entry[- ]level|student|apprentice|campus|graduate program)\b/i;
 
@@ -67,7 +89,9 @@ type GHJob = {
   metadata?: { name: string; value: unknown }[];
 };
 async function greenhouse(c: CompanyFeed): Promise<RawPosting[]> {
-  const { jobs } = await getJSON<{ jobs: GHJob[] }>(`https://boards-api.greenhouse.io/v1/boards/${c.config.token}/jobs?content=true`);
+  const url = `https://boards-api.greenhouse.io/v1/boards/${c.config.token}/jobs?content=true`;
+  const raw = await getJSON<{ jobs: GHJob[] }>(url);
+  const jobs = usable<GHJob>(raw?.jobs, (j) => j.id != null && has(j.title) && has(j.absolute_url), "jobs", url);
   return jobs
     .filter((j) => STUDENT_TITLE.test(j.title))
     .map((j) => {
@@ -82,7 +106,9 @@ async function greenhouse(c: CompanyFeed): Promise<RawPosting[]> {
         locationText: j.location?.name ?? "",
         department: j.departments?.[0]?.name ?? null,
         description,
-        postedAt: j.first_published ?? j.updated_at ?? null,
+        // `first_published` was present on every posting observed (887/887, 2026-09-27). `updated_at` is an EDIT time, not a
+        // posting date, so it is never used as a fallback: a missing first_published means "unknown", not "just now".
+        postedAt: j.first_published ?? null,
         commitment: null,
         payText: payFromText(description),
         isRemoteHint: /remote/i.test(j.location?.name ?? ""),
@@ -99,7 +125,8 @@ type LeverJob = {
   workplaceType?: string; salaryRange?: { min: number; max: number; interval: string; currency: string };
 };
 async function lever(c: CompanyFeed): Promise<RawPosting[]> {
-  const jobs = await getJSON<LeverJob[]>(`https://api.lever.co/v0/postings/${c.config.token}?mode=json`);
+  const url = `https://api.lever.co/v0/postings/${c.config.token}?mode=json`;
+  const jobs = usable<LeverJob>(await getJSON<LeverJob[]>(url), (j) => has(j.id) && has(j.text) && has(j.hostedUrl) && typeof j.categories === "object" && j.categories !== null, "postings", url);
   return jobs
     .filter((j) => STUDENT_TITLE.test(j.text) || /intern/i.test(j.categories.commitment ?? ""))
     .map((j) => {
@@ -135,9 +162,9 @@ type AshbyJob = {
   compensation?: { compensationTierSummary?: string };
 };
 async function ashby(c: CompanyFeed): Promise<RawPosting[]> {
-  const { jobs } = await getJSON<{ jobs: AshbyJob[] }>(
-    `https://api.ashbyhq.com/posting-api/job-board/${c.config.token}?includeCompensation=true`,
-  );
+  const url = `https://api.ashbyhq.com/posting-api/job-board/${c.config.token}?includeCompensation=true`;
+  const raw = await getJSON<{ jobs: AshbyJob[] }>(url);
+  const jobs = usable<AshbyJob>(raw?.jobs, (j) => has(j.id) && has(j.title) && has(j.jobUrl), "jobs", url);
   return jobs
     .filter((j) => STUDENT_TITLE.test(j.title) || /intern/i.test(j.employmentType ?? ""))
     .map((j) => {
@@ -169,7 +196,9 @@ async function smartrecruiters(c: CompanyFeed): Promise<RawPosting[]> {
   const id = encodeURIComponent(c.config.token);
   const out: RawPosting[] = [];
   for (const q of ["intern", "new grad", "student"]) {
-    const { content } = await getJSON<SRList>(`https://api.smartrecruiters.com/v1/companies/${id}/postings?q=${encodeURIComponent(q)}&limit=100&country=us`);
+    const listUrl = `https://api.smartrecruiters.com/v1/companies/${id}/postings?q=${encodeURIComponent(q)}&limit=100&country=us`;
+    const raw = await getJSON<SRList>(listUrl);
+    const content = usable<SRList["content"][number]>(raw?.content, (p) => has(p.id) && has(p.name) && typeof p.location === "object" && p.location !== null, "postings", listUrl);
     for (const p of content) {
       if (!STUDENT_TITLE.test(p.name) || out.some((o) => o.externalId.endsWith(p.id))) continue;
       const d = await getJSON<SRDetail>(`https://api.smartrecruiters.com/v1/companies/${id}/postings/${p.id}`).catch(() => null);
@@ -200,33 +229,119 @@ async function smartrecruiters(c: CompanyFeed): Promise<RawPosting[]> {
   return out;
 }
 
+// ───────────────────────── Pinpoint ─────────────────────────
+/**
+ * Pinpoint hosts each employer's careers site at {subdomain}.pinpointhq.com and serves the same postings as JSON at
+ * /postings.json. Verified live 2026-09-27 against the SJSU Student Union (sjsustudentunion.pinpointhq.com): every
+ * posting carried a title, url, HTML sections, structured compensation and a deadline_at. There is no posting date.
+ */
+type PinpointPosting = {
+  id: string; title: string; url: string;
+  description?: string; key_responsibilities?: string; key_responsibilities_header?: string;
+  skills_knowledge_expertise?: string; skills_knowledge_expertise_header?: string; benefits?: string; benefits_header?: string;
+  compensation?: string; compensation_visible?: boolean; deadline_at?: string | null;
+  employment_type?: string; employment_type_text?: string; workplace_type?: string;
+  location?: { name?: string; city?: string; province?: string } | null;
+  job?: { department?: { name?: string } | null; structure_custom_group_one?: { name?: string; title?: string } | null } | null;
+};
+
+/**
+ * OBSERVED: the Student Union tags every posting with a custom field titled "Employment Type" whose value was "Student"
+ * on all five postings seen. If that field is present and is not "Student" the posting is a staff job and is dropped;
+ * if it is absent, a part-time posting or a title that says "student" is kept.
+ */
+export function isStudentPosting(p: Pick<PinpointPosting, "title" | "employment_type" | "job">): boolean {
+  const group = p.job?.structure_custom_group_one;
+  if (group?.title === "Employment Type") return /student/i.test(group.name ?? "");
+  return p.employment_type === "part_time" || /\bstudent\b/i.test(p.title);
+}
+
+async function pinpoint(c: CompanyFeed): Promise<RawPosting[]> {
+  const sub = c.config.subdomain ?? "";
+  if (!/^[a-z0-9-]+$/i.test(sub)) throw new SourceError(`invalid Pinpoint subdomain "${sub}"`, "pinpointhq.com");
+  const url = `https://${sub}.pinpointhq.com/postings.json`;
+  const raw = await getJSON<{ data: PinpointPosting[] }>(url);
+  const items = usable<PinpointPosting>(raw?.data, (p) => has(p.id) && has(p.title) && has(p.url), "postings", url);
+  const campus = c.config.campus === "1";
+  return items
+    .filter((p) => !campus || isStudentPosting(p))
+    .map((p) => {
+      const section = (head: string | undefined, body: string | undefined) => (body ? `${head ?? ""}\n${htmlToText(decodeEntities(body))}`.trim() : "");
+      const description = [
+        htmlToText(decodeEntities(p.description ?? "")),
+        section(p.key_responsibilities_header, p.key_responsibilities),
+        section(p.skills_knowledge_expertise_header, p.skills_knowledge_expertise),
+        section(p.benefits_header, p.benefits),
+      ].filter(Boolean).join("\n\n");
+      const where = [p.location?.name, p.location?.city, p.location?.province].filter(Boolean).join(", ");
+      const due = p.deadline_at?.slice(0, 10); // the local date the posting states, e.g. "2026-09-30T23:59:59-07:00" → 2026-09-30
+      return {
+        source: "pinpoint",
+        sourceName: `${c.name} (Pinpoint)`,
+        externalId: `${sub}:${p.id}`,
+        title: p.title.trim(),
+        applyUrl: p.url,
+        sourceUrl: p.url,
+        locationText: where,
+        department: p.job?.department?.name ?? null,
+        description,
+        postedAt: null, // the feed carries no posting date
+        deadline: due && /^\d{4}-\d{2}-\d{2}$/.test(due) ? due : null,
+        commitment: p.employment_type_text ?? null,
+        payText: p.compensation_visible && has(p.compensation) ? p.compensation : payFromText(description),
+        isRemoteHint: p.workplace_type === "remote",
+        onCampus: campus,
+      };
+    });
+}
+
 // ───────────────────────── Workday ─────────────────────────
 type WDList = { total: number; jobPostings: { title: string; externalPath: string; locationsText?: string; postedOn?: string; bulletFields?: string[] }[] };
-type WDDetail = { jobPostingInfo: { id: string; title: string; jobDescription?: string; location?: string; additionalLocations?: string[]; startDate?: string; timeType?: string; externalUrl?: string; jobReqId?: string } };
+type WDDetail = { jobPostingInfo: { id: string; title: string; jobDescription?: string; location?: string; additionalLocations?: string[]; startDate?: string; postedOn?: string; timeType?: string; externalUrl?: string; jobReqId?: string } };
 const WD_US = /\b(?:US|USA|United States|California|CA)\b|Locations/;
+
+/**
+ * Campus mode (config.campus = "1", e.g. the SJSU Research Foundation): the site is an SJSU employer, so location is
+ * not filtered and a posting is kept only when its TITLE names a student-level role. Staff titles that merely contain
+ * "assistant" ("Assistant Director", "Executive Assistant") are excluded.
+ * Verified live 2026-09-27 (sjsurf.wd1.myworkdayjobs.com/SJSURF): the feed works, and every one of its five open
+ * postings was a staff role ("Accounting Manager", "Senior Research Associate"…) — none matched, correctly.
+ */
+const CAMPUS_TITLE = /\b(?:students?|assistants?|aides?|tutors?|interns?|internship)\b/i;
+const NOT_STUDENT_TITLE = /\b(?:assistant\s+(?:director|professor|dean|vice|controller|manager|coach)|executive\s+assistant|senior|principal|director|manager)\b/i;
+export const isCampusTitle = (title: string) => CAMPUS_TITLE.test(title) && !NOT_STUDENT_TITLE.test(title);
+
 async function workday(c: CompanyFeed): Promise<RawPosting[]> {
   const { tenant, host, site } = c.config; // host = wd1 | wd5 | ...
+  const campus = c.config.campus === "1";
   const base = `https://${tenant}.${host}.myworkdayjobs.com`;
   const api = `${base}/wday/cxs/${tenant}/${site}`;
   const seen = new Map<string, WDList["jobPostings"][number]>();
-  for (const searchText of ["intern", "university graduate", "student"]) {
+  const listUrl = `${api}/jobs`;
+  for (const searchText of campus ? ["student", "assistant", "research", "intern"] : ["intern", "university graduate", "student"]) {
+    // OBSERVED (2026-09-27, NVIDIA): Workday returns `total` ONLY on the first page (offset 0); later pages report
+    // total 0 while still returning postings. The first page's total is therefore the one that bounds the loop.
+    let total = 0;
     for (let offset = 0; offset < 100; offset += 20) {
-      const page = await getJSON<WDList>(`${api}/jobs`, {
+      const page = await getJSON<WDList>(listUrl, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ appliedFacets: {}, limit: 20, offset, searchText }),
       });
-      for (const p of page.jobPostings) {
-        if (STUDENT_TITLE.test(p.title) && WD_US.test(p.locationsText ?? "")) seen.set(p.externalPath, p);
+      const postings = usable<WDList["jobPostings"][number]>(page?.jobPostings, (p) => has(p.title) && has(p.externalPath), "job postings", listUrl);
+      if (offset === 0) total = Number.isFinite(page.total) ? page.total : 0;
+      for (const p of postings) {
+        const keep = campus ? isCampusTitle(p.title) : STUDENT_TITLE.test(p.title) && WD_US.test(p.locationsText ?? "");
+        if (keep) seen.set(p.externalPath, p);
       }
-      if (offset + 20 >= page.total) break;
+      if (offset + 20 >= total || postings.length === 0) break;
     }
   }
   const out: RawPosting[] = [];
   for (const [path, p] of seen) {
     const d = await getJSON<WDDetail>(`${api}${path}`).catch(() => null);
-    if (!d) continue;
-    const info = d.jobPostingInfo;
+    const info = d?.jobPostingInfo;
+    if (!info || !has(info.title)) continue; // a detail we cannot read is skipped, never guessed
     const loc = [info.location, ...(info.additionalLocations ?? [])].filter(Boolean).join("; ");
     const description = htmlToText(info.jobDescription);
     const url = info.externalUrl ?? `${base}/en-US/${site}${path}`;
@@ -240,11 +355,16 @@ async function workday(c: CompanyFeed): Promise<RawPosting[]> {
       locationText: loc || p.locationsText || "",
       department: null,
       description,
-      postedAt: info.startDate ?? null,
+      // UNVERIFIED: what Workday's `startDate` means (a posting date or a role start date) is not documented in anything
+      // we can verify; the one payload observed shows "2026-05-06" beside "Posted 30+ Days Ago", which fits either
+      // reading. So it is NOT used as the posted date. `posted_at` stays null (FRIDAY's own first-seen time is used
+      // instead, honestly) and both raw values are kept in `sourceFields` until the meaning is verified.
+      postedAt: null,
+      sourceFields: { startDate: info.startDate ?? null, postedOn: p.postedOn ?? info.postedOn ?? null },
       commitment: info.timeType ?? null,
       payText: payFromText(description),
       isRemoteHint: /remote/i.test(loc),
-      onCampus: false,
+      onCampus: campus,
     });
   }
   return out;
@@ -256,6 +376,100 @@ async function workday(c: CompanyFeed): Promise<RawPosting[]> {
  * "Student Assistants" listings are kept and "Full-time Staff" listings are skipped.
  * Each posting links to the department's own application system (ADP, iCIMS, Handshake…).
  */
+/**
+ * OBSERVED (2026-09-27, sjsu.edu/as/jobs): the page encodes `&` in some ADP links three or four times
+ * ("&amp;amp;amp;amp;"), and two decoding passes leave "amp;" debris in the query string. Decode until nothing changes.
+ */
+export function decodeUntilStable(s: string): string {
+  let cur = s;
+  for (let i = 0; i < 6; i++) {
+    const next = decodeEntities(cur);
+    if (next === cur) break;
+    cur = next;
+  }
+  return cur;
+}
+
+// ── Recruitment pages ─────────────────────────────────────────────────────────────────────────
+// Some campus employers post no list of jobs, only a cohort recruitment: "Applications for Spring 2027 are open.
+// Applications are due: October 31, 2026." followed by one section per role. Verified live 2026-09-27:
+//   Peer Connections (/peerconnections/about/our-team.php) — open, four roles, due date in the future → postings
+//   Orientation Leaders (…/orientation-leader-recruitment.php) — still says "Applications are now OPEN!" but its stated
+//     close date (September 16) had passed → NOTHING is emitted. A banner alone is never trusted.
+// A posting is produced only when the page BOTH says applications are open AND states an upcoming due date.
+const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+const OPEN_RE = /\bapplications?\b[^.]{0,80}?\b(?:are|is)\s+(?:now\s+)?open\b/i;
+const DUE_RE = /(?:due|deadline|close[sd]?|closing)\b[^.\n]{0,50}?\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})/gi;
+const GENERIC_HEAD = /^(?:join our team|apply(?: now)?|how to apply|faq|frequently asked questions|questions\??|contact(?: us)?|requirements|qualifications|resources|about(?: us)?)$/i;
+const ROLE_WORD = /\b(?:assistants?|mentors?|tutors?|leaders?|advisors?|advisers?|coach(?:es)?|ambassadors?|educators?|consultants?|aides?|interns?|coordinators?|representatives?|supervisors?|instructors?|monitors?)\b/i;
+const NOT_A_ROLE = /[!?]$|\b(?:wanted|process|preparing|prepare|apply|application|how|why|what|learn|outcomes?|benefits?|requirements?)\b/i;
+
+const isoDate = (y: number, monthIndex: number, d: number): string | null => {
+  const t = new Date(Date.UTC(y, monthIndex, d));
+  return t.getUTCFullYear() === y && t.getUTCMonth() === monthIndex && t.getUTCDate() === d ? t.toISOString().slice(0, 10) : null;
+};
+
+export function parseRecruitmentPage(html: string, c: CompanyFeed, now: number): RawPosting[] {
+  const main = html.match(/<main[\s\S]*?<\/main>/i)?.[0] ?? html;
+  const text = htmlToText(main).replace(/\s+/g, " ");
+  if (!OPEN_RE.test(text)) return [];
+
+  const today = todayISODate(now);
+  const upcoming = [...text.matchAll(DUE_RE)]
+    .map((m) => isoDate(Number(m[3]), MONTHS.indexOf(m[1].toLowerCase()), Number(m[2])))
+    .filter((d): d is string => Boolean(d) && (d as string) >= today)
+    .sort();
+  if (!upcoming.length) return []; // open banner, but no upcoming due date: not evidence of a live opening
+  const due = upcoming[0];
+  const dueText = `${MONTHS[Number(due.slice(5, 7)) - 1].replace(/^./, (x) => x.toUpperCase())} ${Number(due.slice(8))}, ${due.slice(0, 4)}`;
+
+  // The application link: the first link in the paragraph that announces the opening, if it is a web address.
+  let applyUrl = c.config.url;
+  for (const p of main.matchAll(/<p[^>]*>[\s\S]*?<\/p>/gi)) {
+    if (!OPEN_RE.test(htmlToText(p[0]))) continue;
+    const href = p[0].match(/<a\s[^>]*href="([^"]+)"/i)?.[1];
+    if (href) {
+      try {
+        const u = new URL(decodeUntilStable(href), c.config.url);
+        if (u.protocol === "https:" || u.protocol === "http:") applyUrl = u.toString();
+      } catch { /* keep the page address */ }
+    }
+    break;
+  }
+
+  // The roles. A configured role wins: the page is then ONE recruitment and its headings are just sections. Otherwise
+  // each h2/h3 that NAMES a role becomes a posting. Headings that read as a section or a call to action ("Application
+  // Process", "Student Leaders Wanted!") are never roles — the real Orientation page has exactly those, and taking
+  // them would invent openings. A page with more than eight candidate headings is not a list of roles at all.
+  const heads = [...main.matchAll(/<h([23])[^>]*>([\s\S]*?)<\/h\1>/gi)]
+    .map((m) => ({ title: htmlToText(m[2]).replace(/\s+/g, " ").trim(), end: (m.index ?? 0) + m[0].length }))
+    .filter((h) => h.title && h.title.length <= 80 && !GENERIC_HEAD.test(h.title) && ROLE_WORD.test(h.title) && !NOT_A_ROLE.test(h.title));
+  const blurb = (from: number) => {
+    const rest = main.slice(from);
+    const stop = rest.search(/<h[1-4][\s>]/i);
+    return htmlToText(stop === -1 ? rest : rest.slice(0, stop)).replace(/\s+/g, " ").trim().slice(0, 700);
+  };
+  const roles = c.config.role ? [{ title: c.config.role, blurb: "" }] : heads.length && heads.length <= 8 ? heads.map((h) => ({ title: h.title, blurb: blurb(h.end) })) : [];
+
+  return roles.map((r) => ({
+    source: "sjsu_page",
+    sourceName: c.name,
+    externalId: `${c.slug}:${r.title}#${due}`, // a new cycle (a new due date) is a new posting
+    title: r.title,
+    applyUrl,
+    sourceUrl: c.config.url,
+    locationText: "San Jose, CA (SJSU Campus)",
+    department: c.config.department ?? c.name,
+    description: [r.blurb, `Applications are open until ${dueText}. Apply through the link on the official ${c.name} page.`].filter(Boolean).join("\n\n"),
+    postedAt: null,
+    deadline: due,
+    commitment: null,
+    payText: null,
+    isRemoteHint: false,
+    onCampus: true,
+  }));
+}
+
 const STAFF_HEAD = /\b(?:full[- ]time|staff|faculty|career|management|administrator)\b/i;
 const STUDENT_HEAD = /\b(?:student|assistant|work[- ]study|part[- ]time|peer|tutor|leader|ambassador|lifeguard)/i;
 const JOB_WORD = /\b(?:assistant|clerk|aide|tutor|mentor|leader|ambassador|advisor|technician|worker|attendant|lifeguard|coach|intern|associate|coordinator|representative|specialist|facilitator|monitor|instructor|developer|designer|writer|photographer|analyst|operator|host|barista|cashier|teacher)\b/i;
@@ -265,6 +479,7 @@ async function sjsuPage(c: CompanyFeed): Promise<RawPosting[]> {
   const res = await fetch(c.config.url, { headers: { "user-agent": UA }, signal: AbortSignal.timeout(TIMEOUT), cache: "no-store" });
   if (!res.ok) throw new SourceError(`${res.status} ${res.statusText}`, c.config.url, res.status);
   const html = await res.text();
+  if (c.config.mode === "recruitment") return parseRecruitmentPage(html, c, Date.now());
   const main = html.match(/<main[\s\S]*?<\/main>/i)?.[0] ?? html;
 
   const out: RawPosting[] = [];
@@ -275,7 +490,7 @@ async function sjsuPage(c: CompanyFeed): Promise<RawPosting[]> {
       heading = htmlToText(m[1]);
       continue;
     }
-    const href = decodeEntities(decodeEntities(m[2]));
+    const href = decodeUntilStable(m[2]);
     const title = htmlToText(m[3].replace(/<span[^>]*(?:sr-only|visually-hidden|screen-reader)[^>]*>[\s\S]*?<\/span>/gi, ""))
       .replace(/\s*\(?this link opens in a new (?:window|tab)\)?/gi, "")
       .replace(/\s+/g, " ")
@@ -407,5 +622,6 @@ export const ADAPTERS: Partial<Record<SourceKind, (c: CompanyFeed) => Promise<Ra
   ashby,
   smartrecruiters,
   workday,
+  pinpoint,
   sjsu_page: sjsuPage,
 };

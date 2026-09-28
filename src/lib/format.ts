@@ -36,8 +36,9 @@ export const STATUS_LABEL: Record<string, string> = {
   offer: "Offer",
   rejected: "Rejected",
   withdrawn: "Withdrawn",
+  closed: "Listing closed",
 };
-export const STATUS_ORDER = ["saved", "preparing", "ready", "applied", "assessment", "interview", "final_round", "offer", "rejected", "withdrawn"] as const;
+export const STATUS_ORDER = ["saved", "preparing", "ready", "applied", "assessment", "interview", "final_round", "offer", "rejected", "withdrawn", "closed"] as const;
 export type AppStatus = (typeof STATUS_ORDER)[number];
 
 export function ago(iso: string | null | undefined) {

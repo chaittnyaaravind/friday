@@ -6,17 +6,22 @@
  */
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { checkEligibility } from "@/lib/domain/eligibility";
 import { computeMatch, type MatchJob, type MatchProfile } from "@/lib/domain/match";
 import { normalizePrefs } from "@/lib/domain/notify-prefs";
 import { SKILLS } from "@/lib/domain/skills";
 import { adzunaProvider } from "./adzuna";
 import { syncProvider } from "./aggregate";
+import { capabilityRows } from "./capabilities";
+import type { CloseBlock } from "./close-guard";
+import { recordSourceRun } from "./health";
+import { syncApplicationsWithListings } from "@/lib/apply/listing-sync";
 import { archiveExpired, closeStale, normalizePosting, upsertJobs, type NormalizedJob } from "./ingest";
 import type { ProviderMetrics } from "./providers";
 import { REGISTRY } from "./registry";
 import { ADAPTERS, usajobsConfigured, type CompanyFeed, type SourceKind } from "./sources";
 
-type CompanyRow = { id: string; slug: string; name: string; ats: string | null; ats_config: Record<string, string>; discoverable: boolean };
+type CompanyRow = { id: string; slug: string; name: string; ats: string | null; ats_config: Record<string, string>; discoverable: boolean; last_crawled_at: string | null };
 
 export async function syncCatalog(db: SupabaseClient) {
   const { error: sErr } = await db.from("skills").upsert(
@@ -40,6 +45,10 @@ export async function syncCatalog(db: SupabaseClient) {
     { onConflict: "slug" },
   );
   if (cErr) throw cErr;
+  // What FRIDAY can honestly claim about each source lives in code (capabilities.ts); the table only mirrors it for the UI.
+  // It is metadata, so a failure to mirror it is logged, never allowed to stop discovery.
+  const { error: capErr } = await db.from("source_capabilities").upsert(capabilityRows().map((r) => ({ ...r, updated_at: new Date().toISOString() })), { onConflict: "source" });
+  if (capErr) console.error(JSON.stringify({ event: "source_capabilities_sync_failed", error: capErr.message }));
 }
 
 export async function skillIdMap(db: SupabaseClient) {
@@ -69,9 +78,20 @@ export type DiscoveryReport = {
   seen: number;
   kept: number;
   created: number;
+  /** Existing listings whose content changed (title, pay, location, deadline, link or description). */
+  updated: number;
+  /** Closed or expired listings a source is listing again. */
+  reopened: number;
+  /** Of `created`, the jobs found on an employer's FIRST crawl: already open, so not "just opened". */
+  baseline: number;
   closed: number;
+  /** Closures the close guard refused (a feed that returned nothing, or would lose most of its listings). They stay active. */
+  closeBlocked: { company: string; source: string; reason: CloseBlock; candidates: number; active: number }[];
   /** Active listings no source confirmed for ARCHIVE_DAYS, marked expired this run. */
   archived: number;
+  /** Tracked applications (not yet submitted) moved to "closed" because their listing closed, and back because it reopened. */
+  trackerClosed?: number;
+  trackerReopened?: number;
   /** Per-provider numbers for aggregator sources (Adzuna): requests, fetched, inserted, deduplicated, errors. */
   providers: Record<string, ProviderMetrics>;
   skipped: Record<string, number>;
@@ -90,14 +110,14 @@ export async function runDiscovery(
     .single();
   if (runErr) throw runErr;
 
-  const report: DiscoveryReport = { runId: run.id, companies: 0, failures: [], seen: 0, kept: 0, created: 0, closed: 0, archived: 0, providers: {}, skipped: {}, newJobIds: [] };
+  const report: DiscoveryReport = { runId: run.id, companies: 0, failures: [], seen: 0, kept: 0, created: 0, updated: 0, reopened: 0, baseline: 0, closed: 0, closeBlocked: [], archived: 0, providers: {}, skipped: {}, newJobIds: [] };
   try {
     const { count: sourcesBefore } = await db.from("companies").select("id", { count: "exact", head: true }).eq("discoverable", true);
     await syncCatalog(db);
     const { count: sourcesAfter } = await db.from("companies").select("id", { count: "exact", head: true }).eq("discoverable", true);
     if ((sourcesAfter ?? 0) > (sourcesBefore ?? 0) && (sourcesBefore ?? 0) > 0) await notifySourceUpdate(db, (sourcesAfter ?? 0) - (sourcesBefore ?? 0), sourcesAfter ?? 0);
     const skills = await skillIdMap(db);
-    let q = db.from("companies").select("id, slug, name, ats, ats_config, discoverable").eq("discoverable", true);
+    let q = db.from("companies").select("id, slug, name, ats, ats_config, discoverable, last_crawled_at").eq("discoverable", true);
     if (opts.companySlugs?.length) q = q.in("slug", opts.companySlugs);
     if (opts.onlySjsu) q = q.eq("is_sjsu", true);
     const { data: companies, error } = await q;
@@ -108,7 +128,8 @@ export async function runDiscovery(
       // Aggregators return postings for many employers, so they run through the shared provider pipeline.
       // A provider that is unconfigured is skipped; one that fails is recorded — neither stops the other sources.
       if (c.ats === "adzuna") {
-        const { metrics, createdIds } = await syncProvider(db, adzunaProvider, skills);
+        const baseline = c.last_crawled_at == null;
+        const { metrics, createdIds } = await syncProvider(db, adzunaProvider, skills, { baseline, runId: run.id });
         report.providers.adzuna = metrics;
         if (!metrics.configured) {
           report.skipped["adzuna-not-configured"] = 1;
@@ -118,8 +139,10 @@ export async function runDiscovery(
         report.seen += metrics.fetched;
         report.kept += metrics.normalized;
         report.created += createdIds.length;
+        if (baseline) report.baseline += createdIds.length;
         report.newJobIds.push(...createdIds);
         if (!metrics.ok) report.failures.push({ company: "adzuna", error: metrics.error ?? "Adzuna failed" });
+        await recordSourceRun(db, { source: "adzuna", scope: c.slug }, { ok: metrics.ok, returned: metrics.fetched, kept: metrics.normalized, error: metrics.error });
         await db.from("companies").update({ last_crawled_at: new Date().toISOString() }).eq("id", c.id);
         return;
       }
@@ -131,6 +154,7 @@ export async function runDiscovery(
         report.companies -= 1;
         return;
       }
+      const health = { source: c.ats as string, scope: c.slug };
       try {
         const feed: CompanyFeed = { slug: c.slug, name: c.name, ats: c.ats as SourceKind, config: c.ats_config };
         const postings = await adapter(feed);
@@ -142,17 +166,35 @@ export async function runDiscovery(
           else kept.push(n);
         }
         report.kept += kept.length;
-        const { created } = await upsertJobs(db, kept, skills);
-        report.created += created.length;
-        report.newJobIds.push(...created);
-        report.closed += await closeStale(db, c.id, c.ats!, startedAt);
+        // First crawl of this employer: everything found is already open, so it is a baseline, not "just opened".
+        const baseline = c.last_crawled_at == null;
+        const up = await upsertJobs(db, kept, skills, { baseline, runId: run.id });
+        report.created += up.created.length;
+        report.updated += up.updated.length;
+        report.reopened += up.reopened.length;
+        if (baseline) report.baseline += up.created.length;
+        report.newJobIds.push(...up.created);
+        const close = await closeStale(db, c.id, c.ats!, startedAt, { returned: postings.length, runId: run.id });
+        report.closed += close.closed;
+        if (close.blocked) report.closeBlocked.push({ company: c.slug, source: c.ats!, reason: close.blocked, candidates: close.candidates, active: close.activeBefore });
         await db.from("companies").update({ last_crawled_at: new Date().toISOString() }).eq("id", c.id);
+        await recordSourceRun(db, health, { ok: true, returned: postings.length, kept: kept.length, closed: close.closed, closeBlocked: close.blocked });
       } catch (e) {
-        report.failures.push({ company: c.slug, error: e instanceof Error ? e.message : String(e) });
+        const error = e instanceof Error ? e.message : String(e);
+        report.failures.push({ company: c.slug, error });
+        await recordSourceRun(db, health, { ok: false, error });
       }
     });
 
-    report.archived = await archiveExpired(db);
+    report.archived = await archiveExpired(db, Date.now(), { runId: run.id });
+    // The tracker follows the listings (pre-submission applications only; see apply/listing-sync.ts). Never fatal to a run.
+    try {
+      const sync = await syncApplicationsWithListings(db);
+      report.trackerClosed = sync.closed;
+      report.trackerReopened = sync.reopened;
+    } catch (e) {
+      report.failures.push({ company: "(tracker sync)", error: e instanceof Error ? e.message : String(e) });
+    }
     await rematchAll(db, { newJobIds: new Set(report.newJobIds) });
     await raiseReminders(db);
 
@@ -179,6 +221,7 @@ export async function runDiscovery(
 type JobForMatch = {
   id: string; company_id: string; imported_by: string | null; title: string; employment_type: MatchJob["employmentType"]; category: string | null; is_on_campus: boolean;
   lat: number | null; lng: number | null; city: string | null; is_remote: boolean; is_hybrid: boolean; description: string | null;
+  status: string; deadline: string | null; hours_max: number | null; work_study: NonNullable<MatchJob["workStudy"]>;
   companies: { name: string } | null;
   job_requirements: { label: string; kind: "required" | "preferred"; skills: { slug: string } | null }[];
 };
@@ -189,7 +232,7 @@ export async function loadActiveJobsForMatching(db: SupabaseClient, onlyIds?: st
   for (let from = 0; ; from += pageSize) {
     let q = db
       .from("jobs")
-      .select("id, company_id, imported_by, title, employment_type, category, is_on_campus, lat, lng, city, is_remote, is_hybrid, description, companies(name), job_requirements(label, kind, skills(slug))")
+      .select("id, company_id, imported_by, title, employment_type, category, is_on_campus, lat, lng, city, is_remote, is_hybrid, description, status, deadline, hours_max, work_study, companies(name), job_requirements(label, kind, skills(slug))")
       .eq("status", "active")
       .range(from, from + pageSize - 1);
     if (onlyIds) q = q.in("id", onlyIds);
@@ -214,13 +257,17 @@ export function toMatchJob(j: JobForMatch): MatchJob {
     isHybrid: j.is_hybrid,
     description: j.description,
     requirements: j.job_requirements.map((r) => ({ slug: r.skills?.slug ?? null, label: r.label, kind: r.kind })),
+    status: j.status,
+    deadline: j.deadline,
+    hoursMax: j.hours_max,
+    workStudy: j.work_study,
   };
 }
 
 export async function loadMatchProfile(db: SupabaseClient, userId: string): Promise<MatchProfile | null> {
   const { data: p } = await db
     .from("profiles")
-    .select("major, origin_lat, origin_lng, radius_miles, workplace, desired_titles, profile_skills(skills(slug))")
+    .select("major, origin_lat, origin_lng, radius_miles, workplace, desired_titles, work_authorization, graduation_year, profile_skills(skills(slug))")
     .eq("id", userId)
     .single();
   if (!p) return null;
@@ -231,6 +278,24 @@ export async function loadMatchProfile(db: SupabaseClient, userId: string): Prom
     radiusMiles: p.radius_miles,
     workplace: p.workplace,
     desiredTitles: p.desired_titles ?? [],
+    workAuthorization: p.work_authorization ?? null,
+    graduationYear: p.graduation_year ?? null,
+  };
+}
+
+/** What is stored with a match besides its score: the breakdown and the eligibility verdict with each check's reason. */
+export function matchColumns(profile: MatchProfile, job: MatchJob) {
+  const m = computeMatch(profile, job);
+  const e = checkEligibility(profile, job, m.distanceMiles);
+  return {
+    score: m.score,
+    strong: m.strong,
+    missing: m.missing,
+    difficulty: m.difficulty,
+    distance_miles: m.distanceMiles,
+    breakdown: m.breakdown,
+    eligibility: e.verdict,
+    eligibility_checks: e.checks.map(({ id, label, status, detail }) => ({ id, label, status, detail })),
   };
 }
 
@@ -247,10 +312,7 @@ export async function rematchAll(db: SupabaseClient, opts: { userId?: string; ne
     if (!profile) continue;
     // A student's imports are private: never score, or reveal the requirements of, someone else's.
     const visible = jobs.filter((j) => !j.imported_by || j.imported_by === u.id);
-    const rows = visible.map((j) => {
-      const m = computeMatch(profile, toMatchJob(j));
-      return { user_id: u.id, job_id: j.id, score: m.score, strong: m.strong, missing: m.missing, difficulty: m.difficulty, distance_miles: m.distanceMiles, computed_at: new Date().toISOString() };
-    });
+    const rows = visible.map((j) => ({ user_id: u.id, job_id: j.id, ...matchColumns(profile, toMatchJob(j)), computed_at: new Date().toISOString() }));
     for (let i = 0; i < rows.length; i += 500) {
       const { error: mErr } = await db.from("job_matches").upsert(rows.slice(i, i + 500), { onConflict: "user_id,job_id" });
       if (mErr) throw mErr;

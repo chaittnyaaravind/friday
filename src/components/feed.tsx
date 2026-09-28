@@ -12,11 +12,14 @@ export async function Feed({
   searchParams,
   preset,
   lockTypes,
+  campus,
   empty,
 }: {
   searchParams: Record<string, string | string[] | undefined>;
   preset?: Partial<JobFilters>;
   lockTypes?: boolean;
+  /** SJSU on-campus feed: shows the campus role and employer filters. */
+  campus?: boolean;
   empty: { title: string; body?: React.ReactNode; action?: React.ReactNode };
 }) {
   const user = await requireUser();
@@ -36,7 +39,7 @@ export async function Feed({
   return (
     <div className="flex flex-col gap-6">
       <Suspense>
-        <Filters total={total} preset={{ hideType: lockTypes, isF1: profile?.work_authorization === "f1" }} />
+        <Filters total={total} preset={{ hideType: lockTypes, isF1: profile?.work_authorization === "f1", campus }} />
       </Suspense>
       <JobGrid jobs={jobs} empty={empty} />
       {total > PAGE && (

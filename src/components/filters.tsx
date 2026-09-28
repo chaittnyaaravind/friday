@@ -3,6 +3,7 @@
 import { Search, SlidersHorizontal, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
+import { CAMPUS_EMPLOYERS, CAMPUS_EMPLOYER_LABEL, CAMPUS_ROLES, CAMPUS_ROLE_LABEL, type CampusRole } from "@/lib/domain/campus";
 import { CATEGORIES } from "@/lib/domain/normalize";
 import { Input, Select, cx } from "./ui";
 
@@ -15,7 +16,10 @@ const TYPES = [
   { v: "research", l: "Research" },
 ];
 
-type Preset = { hideType?: boolean; hideCategory?: boolean; isF1?: boolean };
+type Preset = { hideType?: boolean; hideCategory?: boolean; isF1?: boolean; campus?: boolean };
+
+/** The campus roles worth a one-tap pill; every role is in the "Filters" panel. */
+const QUICK_ROLES: CampusRole[] = ["student_assistant", "research_assistant", "lab_assistant", "tutor_mentor", "technical_media"];
 
 export function Filters({ preset = {}, total }: { preset?: Preset; total: number }) {
   const router = useRouter();
@@ -71,11 +75,16 @@ export function Filters({ preset = {}, total }: { preset?: Preset; total: number
           TYPES.map((t) => (
             <Pill key={t.l} on={(sp.get("type") ?? "") === t.v} onClick={() => set({ type: t.v || null })}>{t.l}</Pill>
           ))}
+        {preset.campus &&
+          QUICK_ROLES.map((r) => (
+            <Pill key={r} on={sp.get("campusRole") === r} onClick={() => set({ campusRole: sp.get("campusRole") === r ? null : r })}>{CAMPUS_ROLE_LABEL[r]}</Pill>
+          ))}
         <Pill on={(sp.get("level") ?? "").split(",").includes("new_grad")} onClick={() => set({ level: sp.get("level") === "new_grad" ? null : "new_grad" })}>New grad</Pill>
         <Pill on={(sp.get("level") ?? "").split(",").includes("entry")} onClick={() => set({ level: sp.get("level") === "entry" ? null : "entry" })}>Entry level</Pill>
         <Pill on={sp.get("remote") === "1"} onClick={() => toggle("remote")}>Remote</Pill>
         <Pill on={sp.get("hybrid") === "1"} onClick={() => toggle("hybrid")}>Hybrid</Pill>
         <Pill on={sp.get("saved") === "1"} onClick={() => toggle("saved")}>Saved</Pill>
+        <Pill on={sp.get("hideBlocked") === "1"} onClick={() => toggle("hideBlocked")}>Hide likely blocked</Pill>
         {preset.isF1 && <Pill on={sp.get("hideRestricted") === "1"} onClick={() => toggle("hideRestricted")}>Hide citizenship/clearance-only</Pill>}
         <span className={cx("ml-auto text-[12px] text-dim transition-opacity", pending && "opacity-50")}>
           <span className="num font-mono">{total}</span> result{total === 1 ? "" : "s"}
@@ -92,6 +101,22 @@ export function Filters({ preset = {}, total }: { preset?: Preset; total: number
             <option value="50">Within 50 miles</option>
             <option value="100">Within 100 miles</option>
           </Sel>
+          {preset.campus && (
+            <>
+              <Sel label="Campus role" value={sp.get("campusRole") ?? ""} onChange={(v) => set({ campusRole: v || null })}>
+                <option value="">Any role</option>
+                {CAMPUS_ROLES.filter((r) => r !== "other").map((r) => (
+                  <option key={r} value={r}>{CAMPUS_ROLE_LABEL[r]}</option>
+                ))}
+              </Sel>
+              <Sel label="Campus employer" value={sp.get("campusEmployer") ?? ""} onChange={(v) => set({ campusEmployer: v || null })}>
+                <option value="">Any employer</option>
+                {CAMPUS_EMPLOYERS.filter((e) => e !== "other").map((e) => (
+                  <option key={e} value={e}>{CAMPUS_EMPLOYER_LABEL[e]}</option>
+                ))}
+              </Sel>
+            </>
+          )}
           {!preset.hideCategory && (
             <Sel label="Category" value={sp.get("category") ?? ""} onChange={(v) => set({ category: v || null })}>
               <option value="">All categories</option>
@@ -114,7 +139,7 @@ export function Filters({ preset = {}, total }: { preset?: Preset; total: number
           </Sel>
           <Sel label="Source" value={sp.get("source") ?? ""} onChange={(v) => set({ source: v || null })}>
             <option value="">All sources</option>
-            <option value="sjsu_page">Official SJSU pages</option>
+            <option value="sjsu_page,pinpoint">Official SJSU pages &amp; job boards</option>
             <option value="adzuna">Adzuna (found by FRIDAY)</option>
             <option value="workday,greenhouse,lever,ashby,smartrecruiters">Company career sites</option>
             <option value="handshake_import">Handshake (imported by you)</option>

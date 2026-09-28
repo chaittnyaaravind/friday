@@ -44,8 +44,16 @@ export function ApplyPanel({ jobId, applyUrl, official, saved, applicationId, ha
               </>
             )}
           </Step>
-          <Step n={3} done={Boolean(applicationId)}>Track it — FRIDAY drafts a cover letter and reminds you to follow up.</Step>
-          <Step n={4} done={false}>Submit on the employer&apos;s site yourself, then mark it <span className="text-text">Applied</span> in your tracker.</Step>
+          <Step n={3} done={Boolean(applicationId)}>Track it — FRIDAY can draft a cover letter and reminds you to follow up.</Step>
+          <Step n={4} done={false}>
+            {applicationId ? (
+              <>
+                Review your application packet — exactly what you would send — and approve it.
+                <span className="mt-2 flex"><LinkButton size="sm" href={`/applications/${applicationId}/packet`}>Prepare application packet</LinkButton></span>
+              </>
+            ) : <>Track it first, then FRIDAY can prepare your application packet for review.</>}
+          </Step>
+          <Step n={5} done={false}>Submit on the employer&apos;s site yourself, then mark it <span className="text-text">Applied</span> in your tracker.</Step>
         </ol>
         <p className="text-[11.5px] leading-snug text-dim">FRIDAY never submits applications, solves CAPTCHAs, or signs in on your behalf.</p>
       </div>

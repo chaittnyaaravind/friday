@@ -1,0 +1,206 @@
+{
+  "_capture": {
+    "capturedAt": "2026-09-28T01:41:37.014Z",
+    "url": "https://boards-api.greenhouse.io/v1/boards/databricks/jobs?content=true",
+    "totalInFeed": 887,
+    "withFirstPublished": 887,
+    "withApplicationDeadline": 0
+  },
+  "jobs": [
+    {
+      "absolute_url": "https://databricks.com/company/careers/open-positions/job?gh_jid=7586263002",
+      "data_compliance": [
+        {
+          "type": "gdpr",
+          "requires_consent": false,
+          "requires_processing_consent": false,
+          "requires_retention_consent": false,
+          "retention_period": null,
+          "demographic_data_consent_applies": false
+        }
+      ],
+      "education": "education_required",
+      "internal_job_id": 5981391002,
+      "location": {
+        "name": "Bellevue, Washington; Mountain View, California; San Francisco, California"
+      },
+      "metadata": [
+        {
+          "id": 9740521002,
+          "name": "Company Assignment",
+          "value": "Databricks, Inc.",
+          "value_type": "single_select"
+        },
+        {
+          "id": 24059030002,
+          "name": "Career Page Posting Category",
+          "value": [
+            "University Recruiting"
+          ],
+          "value_type": "multi_select"
+        }
+      ],
+      "id": 7586263002,
+      "updated_at": "2026-09-23T16:12:01-04:00",
+      "requisition_id": "P-1336",
+      "title": "Associate Product Manager, New Grad (2027 Start)",
+      "company_name": "Databricks",
+      "first_published": "2024-08-08T18:52:06-04:00",
+      "language": "en",
+      "application_deadline": null,
+      "content": "&lt;p&gt;P-1336&lt;/p&gt;\n&lt;p&gt;At Databricks, we are passionate about helping data teams solve the world&#39;s toughest problems — from making the next mode of transportation a reality to accelerating the development of medical breakthroughs. We do this by building and running the world&#39;s best data and AI infrastructure platform so our customers can use deep data insights to improve their business.&lt;/p&gt;\n&lt;p&gt;As an Associate Product Manager, you will join a team that works diligently to understand and solve our customers’ most challenging problems. We&#39;re hiring across all of our teams, including AI Platform, Genie, Machine Learning, Unity Catalog,&lt;strong&gt; &lt;/strong&gt;Databricks SQL, ETL, Streaming, and EDA. As part of our 2027 APM cohort, you will have a dedicated manager and mentor as well as connect with product managers, engineers, designers, account teams, other interns, and leaders from across the company.&lt;/p&gt;\n&lt;p&gt;We are hiring for San Francisco, CA, Mountain View, CA, and Bellevue, WA.&lt;/p&gt;\n&lt;p&gt;&lt;strong&gt;The impact you will have:&lt;/strong&gt;&lt;/p&gt;\n&lt;ul&gt;\n&lt;li&gt;Deeply understand customer problem space and establish the rails for viable solution space&lt;/li&gt;\n&lt;li&gt;Prototype and test early ideas with customers and engineers to validate direction before the team commits to a build&lt;/li&gt;\n&lt;li&gt;Work with engineers and designers to ship features on the Databricks platformWork with a team to build features for the Databricks platform&lt;/li&gt;\n&lt;li&gt;Own your project end-to-end — design, build, launch, and iterate on feedbackManage your project end-to-end, including design, code, launch and feedback&lt;/li&gt;\n&lt;li&gt;Build with scale, quality, and security in mind from day oneLearn about building a platform that scales quickly while maintaining quality and security&lt;/li&gt;\n&lt;/ul&gt;\n&lt;p&gt;&lt;strong&gt;What we look for:&lt;/strong&gt;&lt;/p&gt;\n&lt;ul&gt;\n&lt;li&gt;You will graduate in Fall 2026 or Spring 2027 with a bachelors or masters degree in computer science or related engineering practice&lt;/li&gt;\n&lt;li&gt;Pursuing a bachelor&#39;s or master&#39;s in computer science or a related engineering field&lt;/li&gt;\n&lt;li&gt;You&#39;ve used AI tooling for both personal productivity and development projects&lt;/li&gt;\n&lt;li&gt;You have some first hand experience with SQL and/or Python&lt;/li&gt;\n&lt;li&gt;You&#39;re hands-on and learn by doing — happy to build, test, and iterate your way to an answer&lt;/li&gt;\n&lt;li&gt;You use analytical skills to make data-driven decisions (e.g. analyzing product usage)&lt;/li&gt;\n&lt;li&gt;You can make complex topics simple and communicate nuance to partners (engineers, customers, field) in both written and verbal form&lt;/li&gt;\n&lt;li&gt;You&#39;re excited to solve ambiguous problems with a collaborative team&lt;/li&gt;\n&lt;li&gt;You stay curious and keep learning, whether it&#39;s a new technology, a custo",
+      "departments": [
+        {
+          "id": 4143129002,
+          "name": "University Recruiting - Product",
+          "child_ids": [],
+          "parent_id": 4001023002
+        }
+      ],
+      "offices": [
+        {
+          "id": 4013301002,
+          "name": "United States",
+          "location": "United States",
+          "child_ids": [
+            4056357002,
+            4056356002
+          ],
+          "parent_id": 4056352002
+        }
+      ],
+      "ai_disclaimer": null,
+      "include_ai_disclaimer": null,
+      "ai_opt_out_request_url": null
+    },
+    {
+      "absolute_url": "https://databricks.com/company/careers/open-positions/job?gh_jid=7011263002",
+      "data_compliance": [
+        {
+          "type": "gdpr",
+          "requires_consent": false,
+          "requires_processing_consent": false,
+          "requires_retention_consent": false,
+          "retention_period": null,
+          "demographic_data_consent_applies": false
+        }
+      ],
+      "education": "education_required",
+      "internal_job_id": 5676144002,
+      "location": {
+        "name": "San Francisco, California"
+      },
+      "metadata": [
+        {
+          "id": 9740521002,
+          "name": "Company Assignment",
+          "value": "Databricks, Inc.",
+          "value_type": "single_select"
+        },
+        {
+          "id": 24059030002,
+          "name": "Career Page Posting Category",
+          "value": [
+            "Research",
+            "University Recruiting"
+          ],
+          "value_type": "multi_select"
+        }
+      ],
+      "id": 7011263002,
+      "updated_at": "2026-09-21T13:22:12-04:00",
+      "requisition_id": "P-1000",
+      "title": "PhD GenAI Research Scientist Intern",
+      "company_name": "Databricks",
+      "first_published": "2023-11-07T16:36:32-05:00",
+      "language": "en",
+      "application_deadline": null,
+      "content": "&lt;p&gt;&lt;strong&gt;Company Description:&lt;/strong&gt;&lt;/p&gt;\n&lt;p&gt;At Databricks, we are obsessed with enabling data teams to solve the world’s toughest problems, from security threat detection to cancer drug development. We do this by building and running the world’s best data and AI platform, so our customers can focus on the high value challenges that are central to their own missions.&lt;/p&gt;\n&lt;p&gt;The Mosaic AI organization enables companies to develop AI models and systems using their own data, with technologies ranging from fine-tuning LLMs for enterprise domains, to a platform for building compound AI systems that use retrieval and agents. Mosaic AI is committed to the belief that a company’s AI models are just as valuable as any other core IP, and that high-quality AI models should be available to all.&lt;/p&gt;\n&lt;p&gt;&lt;strong&gt;Job description:&lt;/strong&gt;&lt;/p&gt;\n&lt;p&gt;Most of the world&#39;s data+AI problems lie in enterprise domains, behind closed doors. Our research team&#39;s goal is to push the frontier of &quot;domain adaptation&quot; - how can we develop LLMs and AI systems that work well for custom domains. To do this we are tackling open research problems on a range of topics, from how to scale/automate eval, fine tune with synthetic data, retrieval augmentation, fast/efficient inference and more.&amp;nbsp;&lt;/p&gt;\n&lt;p&gt;You will work with our research team on projects focused on adapting LLMs and AI systems towards enterprise domains. This may include:&lt;/p&gt;\n&lt;ul&gt;\n&lt;li&gt;Adapting, improving, and evaluating a method from the literature.&lt;/li&gt;\n&lt;li&gt;Designing an entirely new method for domain adaptation.&lt;/li&gt;\n&lt;li&gt;Composing together multiple methods to create new recipes for efficient post-training.&lt;/li&gt;\n&lt;li&gt;Evaluation of LLMs and AI systems.&amp;nbsp;&lt;/li&gt;\n&lt;/ul&gt;\n&lt;p&gt;&lt;strong&gt;Your qualifications and qualities:&lt;/strong&gt;&lt;/p&gt;\n&lt;ul&gt;\n&lt;li&gt;&amp;nbsp;Required:&lt;/li&gt;\n&lt;ul&gt;\n&lt;li&gt;Research experience in and proficiency with the fundamentals of deep learning.&lt;/li&gt;\n&lt;li&gt;Pursuing a PhD in computer science or related fields (electrical engineering, neuroscience, physics, math, etc.).&lt;/li&gt;\n&lt;li&gt;Proficient software engineering skills, including with PyTorch.&lt;/li&gt;\n&lt;/ul&gt;\n&lt;/ul&gt;&lt;div class=&quot;content-pay-transparency&quot;&gt;&lt;div class=&quot;pay-input&quot;&gt;&lt;div class=&quot;description&quot;&gt;&lt;p&gt;&amp;nbsp;&lt;/p&gt;\n&lt;p&gt;&lt;strong&gt;Pay Range Transparency&lt;/strong&gt;&lt;/p&gt;\n&lt;p&gt;&lt;span style=&quot;font-weight: 400; font-size: 14px;&quot;&gt;Databricks is committed to fair and equitable compensation practices. The pay range(s) for this role is listed below and represents the expected salary range for non-commissionable roles or on-target earnings for commissionable roles.&amp;nbsp; Actual compensation packages are based on several fac",
+      "departments": [
+        {
+          "id": 4001023002,
+          "name": "University Recruiting",
+          "child_ids": [
+            4143128002,
+            4143129002
+          ],
+          "parent_id": null
+        }
+      ],
+      "offices": [
+        {
+          "id": 4056362002,
+          "name": "Mountain View, California",
+          "location": "Mountain View, California",
+          "child_ids": [],
+          "parent_id": 4033534002
+        }
+      ],
+      "ai_disclaimer": null,
+      "include_ai_disclaimer": null,
+      "ai_opt_out_request_url": null
+    },
+    {
+      "absolute_url": "https://databricks.com/company/careers/open-positions/job?gh_jid=8805655002",
+      "data_compliance": [
+        {
+          "type": "gdpr",
+          "requires_consent": false,
+          "requires_processing_consent": false,
+          "requires_retention_consent": false,
+          "retention_period": null,
+          "demographic_data_consent_applies": false
+        }
+      ],
+      "internal_job_id": 6523784002,
+      "location": {
+        "name": "Tokyo, Japan"
+      },
+      "metadata": [
+        {
+          "id": 9740521002,
+          "name": "Company Assignment",
+          "value": "Databricks Japan K.K.",
+          "value_type": "single_select"
+        },
+        {
+          "id": 24059030002,
+          "name": "Career Page Posting Category",
+          "value": [
+            "Field Engineering"
+          ],
+          "value_type": "multi_select"
+        }
+      ],
+      "id": 8805655002,
+      "updated_at": "2026-09-21T13:22:12-04:00",
+      "requisition_id": "CSQ427R266",
+      "title": "デリバリーソリューションアーキテクト",
+      "company_name": "Databricks",
+      "first_published": "2026-09-16T09:11:57-04:00",
+      "language": "en",
+      "application_deadline": null,
+      "content": "&lt;p&gt;Req ID: CSQ427R266&lt;br&gt;Location: Tokyo, Japan&lt;/p&gt;\n&lt;p&gt;Databricksは、お客様がAIプラットフォームを活用して、世界で最も難しいなデータに関する課題を解決できるよう支援することをミッションとしています。デリバリーソリューションアーキテクト（DSA）は、この重要なミッションにおいて、セールスおよびフィールド・エンジニアリングチームと協力し、お客様のDatabricksプラットフォームの導入と利用拡大を加速させる重要な役割を担います。DSAとして、お客様がすでに導入を決定したDatabricksのワークロードについて、お客様がプラットフォームから最大限の価値と投資対効果を得られるよう、技術的な指導とサポートを提供し、お客様の成功を確実にします。特に、複雑な課題を抱えるお客様に対して、より重点的かつ技術的な責任を持って支援を行います。&lt;br&gt;このポジションは、技術とビジネスの両面を兼ね備えたハイブリッドな役割です。担当するお客様とユースケースにおいて、成長を推進します。ビジネス面では、お客様の意思決定者と関係を構築し、他の専門チームと連携しながら、Databricksが実行できる計画や戦略を策定・推進します。技術面ではDatabricksの全製品における、お客様導入後の技術的なリーダーとなります。組織内のあらゆるレベルの人々と、技術的な専門知識を活かしてコミュニケーションをとる能力が求められます。&lt;/p&gt;\n&lt;p&gt;あなたがもたらす影響 :&amp;nbsp;&lt;/p&gt;\n&lt;ul&gt;\n&lt;li&gt;戦略的アカウントにおける複雑なユースケースおよび複数のワークストリーム全体で、技術的な実行戦略を定義し、影響を与える。&lt;/li&gt;\n&lt;li&gt;お客様のテクニカルリードやアーキテクトにとって信頼される技術アドバイザーとなり、アーキテクチャの議論をリードし、技術的な意思決定をガイドする。&lt;/li&gt;\n&lt;li&gt;パフォーマンス、コスト、信頼性、長期的なニーズのバランスを取りながら、安全かつガバナンスの効いたスケーラブルなDatabricksアーキテクチャを設計する。&lt;/li&gt;\n&lt;li&gt;お客様の成果を加速させる実用的なソリューション、プロトタイプ、再利用可能な技術資産を構築・実証する。&lt;/li&gt;\n&lt;li&gt;プラットフォームの成熟度とスケーリングのニーズを予測し、セキュリティ、ガバナンス、運用の卓越性に関するベストプラクティスを確立する。&lt;/li&gt;\n&lt;li&gt;アーキテクチャに影響を与え、デリバリーの障害を取り除き、技術的な実行をビジネス成果に結びつけることで、プラットフォームの採用と利用を促進する。&lt;/li&gt;\n&lt;li&gt;Databricks、お客様、導入チームと連携し、リソースの調整、リスク管理、デリバリーの加速を行う。&lt;/li&gt;\n&lt;li&gt;同僚を指導し、組織全体で活用できる再利用可能な技術ガイダンス、フレームワーク、およびイネーブルメントに貢献する。&lt;/li&gt;\n&lt;/ul&gt;\n&lt;p&gt;必要な条件/経験:&lt;/p&gt;\n&lt;ul&gt;\n&lt;li&gt;ソリューションアーキテクト、ソリューションエンジニアリング、技術コンサルティング、プロフェッショナルサービス、データエンジニアリング、または関連する技術的役割における5年以上の経験&lt;/li&gt;\n&lt;li&gt;複雑な顧客のユースケースや複数のワークストリーム全体で、技術戦略やアーキテクチャに影響を与えた経験&lt;/li&gt;\n&lt;li&gt;Python、SQL、または類似の言語における高いコーディング能力と、技術的ソリューションの構築、デバッグ、検証を行う能力&lt;/li&gt;\n&lt;li&gt;分散データシステム、データエンジニアリング、分析、データウェアハウジング、AI/ML、および最新のクラウドアーキテクチャに関する深い理解&lt;/li&gt;\n&lt;li&gt;安全でガバナンスが効き、スケーラブルかつ本番環境に対応したデータソリューションを設計した経験&lt;/li&gt;\n&lt;li&gt;不明確な技術的問題を解決し、トレードオフを評価し、構造化された分析や実験を通じてソリューションを検証する能力&lt;/li&gt;\n&lt;li&gt;技術リード、アーキテクト、および顧客のシニアステークホルダーとのアーキテクチャ議論をリードした経験&lt;/li&gt;\n&lt;li&gt;セキュリティ、ガバナンス、パフォーマンス、信頼性、コスト最適化など、プラットフォームの運用上の卓越性に関する深い理解&lt;/li&gt;\n&lt;li&gt;技術的リーダーシップを通じて、顧客の採用、利用、そして測定可能なビジネス成果を促進した実績&lt;/li&gt;\n&lt;li&gt;強力なステークホルダーマネジメントおよび部門横断的なリーダーシップスキル（正式な権限なしでチームを調整する能力を含む）&lt;/li&gt;\n&lt;li&gt;コンピュータサイエンス、工学、または同等の分野における学士号&lt;/li&gt;\n&lt;li&gt;日本語の完全な専門的習熟度が必須&lt;/li&gt;\n&lt;/ul&gt;\n&lt;p&gt;望ましい経験/スキル&lt;/p&gt;\n&lt;ul&gt;\n&lt;li&gt;Databricksの経験または認定資格&lt;/li&gt;\n&lt;li&gt;AI/ML、データエンジニアリング、ストリーミング、データウェアハウジング、ガバナンス、マイグレーションなどの技術分野における専門知識の構築&lt;/li&gt;\n&lt;li&gt;AWS、Azure、またはGCPおよび本番環境でのクラウドデプロイメントの経験&lt;/li&gt;\n&lt;li&gt;チーム全体で活用できる、再利用可能な技術フレームワーク、デモ、またはイネーブルメント（支援策）を作成した経験&lt;/li&gt;\n&lt;li&gt;ビジネスレベルの英語力があれば尚可&lt;/li&gt;\n&lt;/ul&gt;\n&lt;p&gt;&lt;strong&gt;選考プロセス:&lt;/strong&gt; Recruiter Screen → Hiring Manager Screen → Design &amp;amp; Architecture → Vibe Coding → Build, Demo &amp;amp; Delivery → Reference Check&lt;/p&gt;\n&lt;p&gt;&lt;strong&gt;出張:&lt;/strong&gt; 必要に応じて最大30%程度&lt;/p&gt;&lt;div class=",
+      "departments": [
+        {
+          "id": 4001270002,
+          "name": "Delivery Solutions Architects",
+          "child_ids": [],
+          "parent_id": 4069106002
+        }
+      ],
+      "offices": [
+        {
+          "id": 4056345002,
+          "name": "Remote - Japan",
+          "location": "Remote - Japan",
+          "child_ids": [],
+          "parent_id": 4033856002
+        }
+      ],
+      "ai_disclaimer": null,
+      "include_ai_disclaimer": null,
+      "ai_opt_out_request_url": null
+    }
+  ]
+}

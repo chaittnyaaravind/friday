@@ -36,9 +36,9 @@ const sr = (slug: string, name: string, token: string, domain: string, hqCity: s
 const watch = (slug: string, name: string, careersUrl: string, domain: string, hqCity: string, industry: string): RegistryCompany => ({
   slug, name, domain, hqCity, industry, ats: "watch", careersUrl,
 });
-const sjsu = (slug: string, name: string, url: string, department?: string): RegistryCompany => ({
+const sjsu = (slug: string, name: string, url: string, department?: string, extra: Record<string, string> = {}): RegistryCompany => ({
   slug, name, domain: "sjsu.edu", hqCity: "San Jose", industry: "SJSU", ats: "sjsu_page", careersUrl: url,
-  config: { url, ...(department ? { department } : {}) }, isSjsu: true,
+  config: { url, ...(department ? { department } : {}), ...extra }, isSjsu: true,
 });
 
 export const REGISTRY: RegistryCompany[] = [
@@ -184,13 +184,22 @@ export const REGISTRY: RegistryCompany[] = [
   // ── Adzuna job-search API (aggregator; needs ADZUNA_APP_ID + ADZUNA_APP_KEY). Each posting names its own employer. ──
   { slug: "adzuna", name: "Adzuna", domain: "adzuna.com", hqCity: "London", industry: "Job board", ats: "adzuna", careersUrl: "https://www.adzuna.com" },
 
-  // ── SJSU official hiring pages (on-campus) ──
+  // ── SJSU on-campus employers. Each entry below was checked against the live source on 2026-09-27 (see capabilities.ts). ──
+  // Official hiring pages that list individual postings:
   sjsu("sjsu-associated-students", "SJSU Associated Students", "https://www.sjsu.edu/as/jobs/index.php", "Associated Students"),
   sjsu("sjsu-library", "SJSU King Library", "https://library.sjsu.edu/employment/employment-opportunities/", "King Library"),
-  sjsu("sjsu-peer-connections", "SJSU Peer Connections", "https://peerconnections.sjsu.edu/programs/employment/index.html", "Peer Connections"),
+  // Cohort recruitments (one section per role, an explicit due date). The previous Peer Connections address now redirects to
+  // the department's home page; its real hiring page is /about/our-team.php.
+  sjsu("sjsu-peer-connections", "SJSU Peer Connections", "https://www.sjsu.edu/peerconnections/about/our-team.php", "Peer Connections", { mode: "recruitment" }),
+  sjsu("sjsu-orientation-leaders", "SJSU Orientation & Transition Team", "https://www.sjsu.edu/newspartans/about-us/orientation-leader-recruitment.php", "Orientation & Transition", { mode: "recruitment", role: "Orientation & Transition Leader" }),
+  // The Student Union's "Open Positions" link points to its Pinpoint job board, so that feed is read directly.
+  { slug: "sjsu-student-union", name: "SJSU Student Union", domain: "sjsu.edu", hqCity: "San Jose", industry: "SJSU", ats: "pinpoint", careersUrl: "https://sjsustudentunion.pinpointhq.com/en", config: { subdomain: "sjsustudentunion", campus: "1" }, isSjsu: true },
+  // The Research Foundation's "Open Positions" link points to its Workday site. Its postings are read in campus mode
+  // (student-level titles only); at capture time every open posting was a staff role, so none is kept.
+  { slug: "sjsu-research-foundation", name: "SJSU Research Foundation", domain: "sjsu.edu", hqCity: "San Jose", industry: "SJSU", ats: "workday", careersUrl: "https://sjsurf.wd1.myworkdayjobs.com/SJSURF", config: { tenant: "sjsurf", host: "wd1", site: "SJSURF", campus: "1" }, isSjsu: true },
+  // Pages FRIDAY reads that currently list no individual postings (the Writing Center page describes a standing role and
+  // sends applicants to Handshake); kept because they are official and can start listing openings.
   sjsu("sjsu-writing-center", "SJSU Writing Center", "https://www.sjsu.edu/writingcenter/jobs/index.php", "Writing Center"),
-  sjsu("sjsu-student-union", "SJSU Student Union", "https://www.sjsu.edu/studentunion/get-involved/work-with-us/index.php", "Student Union"),
-  sjsu("sjsu-research-foundation", "SJSU Research Foundation", "https://www.sjsu.edu/researchfoundation/employees/recruitment/index.php", "Research Foundation"),
   sjsu("sjsu-student-jobs", "SJSU Student Jobs", "https://www.sjsu.edu/careers/jobs/student-jobs.php", "SJSU"),
 ];
 

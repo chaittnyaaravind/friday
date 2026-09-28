@@ -1,6 +1,7 @@
 import { AlertTriangle, Check } from "lucide-react";
 import Link from "next/link";
 import type { JobListItem } from "@/lib/data/jobs";
+import { CAMPUS_EMPLOYER_LABEL, CAMPUS_ROLE_LABEL, isCampusEmployer, isCampusRole } from "@/lib/domain/campus";
 import { freshnessOf } from "@/lib/domain/freshness";
 import { ago, deadlineLabel, miles, place, TYPE_LABEL } from "@/lib/format";
 import { SaveButton } from "./actions";
@@ -10,7 +11,7 @@ import { Card, Chip, CompanyMark, EmptyState, MatchBadge, cx } from "./ui";
 export function JobCard({ job }: { job: JobListItem }) {
   const dl = deadlineLabel(job.deadline);
   // The feed only lists active jobs, so this reflects how recently a source confirmed it.
-  const fresh = freshnessOf({ status: "active", discovered_at: job.discovered_at, last_verified_at: job.last_verified_at, deadline: job.deadline });
+  const fresh = freshnessOf({ status: "active", discovered_at: job.discovered_at, last_verified_at: job.last_verified_at, deadline: job.deadline, is_baseline: job.is_baseline });
   // Where a listing came from, stated plainly: the student's own import, or an aggregator with no employer feed behind it.
   const imported = job.sources.some((s) => /_import$/.test(s.source) || s.source === "manual");
   const viaAdzuna = !imported && !job.sources.some((s) => s.official) && job.sources.some((s) => s.source === "adzuna");
@@ -18,6 +19,9 @@ export function JobCard({ job }: { job: JobListItem }) {
   const missing = (job.missing ?? []).filter((m) => m.kind === "required").slice(0, 2);
   const official = job.sources.find((s) => s.official) ?? job.sources[0];
   const alsoOn = job.sources.filter((s) => s !== official).map((s) => s.name.replace(/\s*\(.*\)$/, ""));
+  // SJSU jobs: the campus role the title names and the campus employer — only when known, never guessed.
+  const campusRole = job.is_on_campus ? (job.campus_roles ?? []).find(isCampusRole) : undefined;
+  const campusEmployer = job.is_on_campus && isCampusEmployer(job.campus_employer) && job.campus_employer !== "other" ? job.campus_employer : null;
 
   return (
     <Link href={`/jobs/${job.id}`} className="block h-full">
@@ -55,16 +59,23 @@ export function JobCard({ job }: { job: JobListItem }) {
           <div className="flex min-w-0 flex-col gap-1">
             <div className="flex flex-wrap items-center gap-1.5">
               {fresh.state !== "active" && <Chip tone={fresh.state === "new" || fresh.state === "recent" ? "moss" : "amber"}>{fresh.label}</Chip>}
+              {/* Eligibility is separate from the score: a strong match can still need a check, or be likely blocked. Nothing is shown for "clear". */}
+              {job.eligibility === "verify" && <Chip tone="amber" icon={<AlertTriangle size={11} strokeWidth={2} />}>Verify eligibility</Chip>}
+              {job.eligibility === "blocked" && <Chip tone="accent" icon={<AlertTriangle size={11} strokeWidth={2} />}>Likely blocked</Chip>}
               {imported && <Chip tone="accent">Imported by you</Chip>}
               {viaAdzuna && <Chip>via Adzuna</Chip>}
               <span className="label">{TYPE_LABEL[job.employment_type]}</span>
               {job.category && job.category !== "Campus" && <span className="label">· {job.category}</span>}
+              {campusRole && campusRole !== "other" && <span className="label">· {CAMPUS_ROLE_LABEL[campusRole]}</span>}
+              {campusEmployer && <span className="label">· {CAMPUS_EMPLOYER_LABEL[campusEmployer]}</span>}
               {job.work_study !== "unknown" && job.work_study !== "not_required" && <span className="label !text-amber">· Work-study {job.work_study}</span>}
             </div>
             <span className="truncate text-[11.5px] text-dim">
               {dl ? <span className={cx(dl.urgent && "text-accent")}>{dl.text} · </span> : null}
               {official?.official ? "Official" : "Source"}: {official?.name.replace(/\s*\(.*\)$/, "") ?? "—"}
-              {alsoOn.length ? ` · also on ${alsoOn.join(", ")}` : ""} · verified {ago(job.last_verified_at)}
+              {alsoOn.length ? ` · also on ${alsoOn.join(", ")}` : ""}
+              {/* First seen by FRIDAY — not when the employer posted it — and only when it is not a baseline find. */}
+              {job.is_baseline ? "" : ` · first seen ${ago(job.discovered_at)}`} · verified {ago(job.last_verified_at)}
             </span>
           </div>
           <MatchBadge score={job.score} />

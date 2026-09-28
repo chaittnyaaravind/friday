@@ -10,6 +10,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { areasFromProfiles } from "@/lib/domain/search-area";
+import { writeJobEvents } from "./change";
 import { companySlug, findDuplicate, normalizeCompany, type JobKey } from "./dedupe";
 import { normalizePosting, upsertJobs, type NormalizedJob } from "./ingest";
 import { AGGREGATOR_SOURCES, emptyMetrics, type JobProvider, type ProviderMetrics } from "./providers";
@@ -50,7 +51,7 @@ export type MergeResult = { fresh: NormalizedJob[]; attached: number; refreshed:
  * Split normalized aggregator jobs into (a) duplicates of jobs FRIDAY already has and (b) genuinely new ones.
  * Duplicates get a private-safe extra source row; an aggregator-only job is refreshed so it does not go stale.
  */
-export async function mergeAggregated(db: SupabaseClient, jobs: NormalizedJob[], now: () => string = () => new Date().toISOString()): Promise<MergeResult> {
+export async function mergeAggregated(db: SupabaseClient, jobs: NormalizedJob[], now: () => string = () => new Date().toISOString(), opts: { runId?: string | null } = {}): Promise<MergeResult> {
   if (!jobs.length) return { fresh: [], attached: 0, refreshed: 0 };
   const companyIds = [...new Set(jobs.map((j) => j.row.company_id as string))];
 
@@ -81,7 +82,7 @@ export async function mergeAggregated(db: SupabaseClient, jobs: NormalizedJob[],
   let attached = 0;
   let refreshed = 0;
   const sources: Record<string, unknown>[] = [];
-  const reactivate: string[] = [];
+  const reactivate = new Map<string, { source: string; from: string }>();
   const stamp = now();
 
   for (const j of jobs) {
@@ -96,7 +97,7 @@ export async function mergeAggregated(db: SupabaseClient, jobs: NormalizedJob[],
       if (official.has(job.id)) attached++;
       else {
         refreshed++; // aggregator-only job: seen again, so it is still verified
-        if (job.status !== "active") reactivate.push(job.id);
+        if (job.status !== "active") reactivate.set(job.id, { source: j.posting.source, from: job.status });
       }
       continue;
     }
@@ -119,10 +120,14 @@ export async function mergeAggregated(db: SupabaseClient, jobs: NormalizedJob[],
     const { error } = await db.from("jobs").update({ last_verified_at: stamp }).in("id", ids);
     if (error) throw error;
   }
-  for (const ids of chunk(reactivate, 200)) {
-    const { error } = await db.from("jobs").update({ status: "active" }).in("id", ids);
+  for (const ids of chunk([...reactivate.keys()], 200)) {
+    const { error } = await db.from("jobs").update({ status: "active", closed_at: null }).in("id", ids);
     if (error) throw error;
   }
+  await writeJobEvents(
+    db,
+    [...reactivate].map(([job_id, r]) => ({ job_id, kind: "reopened" as const, source: r.source, run_id: opts.runId ?? null, changes: { from_status: r.from } })),
+  );
   return { fresh, attached, refreshed };
 }
 
@@ -134,7 +139,12 @@ export async function loadSearchAreas(db: SupabaseClient) {
 }
 
 /** Run one provider end to end. Never throws: a failure is reported in the metrics and the sync continues. */
-export async function syncProvider(db: SupabaseClient, provider: JobProvider, skills: Map<string, number>): Promise<{ metrics: ProviderMetrics; createdIds: string[] }> {
+export async function syncProvider(
+  db: SupabaseClient,
+  provider: JobProvider,
+  skills: Map<string, number>,
+  opts: { baseline?: boolean; runId?: string | null } = {},
+): Promise<{ metrics: ProviderMetrics; createdIds: string[] }> {
   const metrics = emptyMetrics(provider.id, provider.configured());
   if (!metrics.configured) return { metrics, createdIds: [] };
   metrics.attempted = true;
@@ -174,10 +184,10 @@ export async function syncProvider(db: SupabaseClient, provider: JobProvider, sk
       usable.push(k.n);
     }
 
-    const merged = await mergeAggregated(db, usable);
+    const merged = await mergeAggregated(db, usable, undefined, { runId: opts.runId });
     metrics.deduplicated = merged.attached;
     metrics.refreshed = merged.refreshed;
-    const { created: newIds } = await upsertJobs(db, merged.fresh, skills);
+    const { created: newIds } = await upsertJobs(db, merged.fresh, skills, { baseline: opts.baseline, runId: opts.runId });
     createdIds = newIds;
     metrics.inserted = newIds.length;
     metrics.ok = true;

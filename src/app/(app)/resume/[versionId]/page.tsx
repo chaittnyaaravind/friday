@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ResumeEditor } from "@/components/resume/editor";
+import { TailoringReportPanel } from "@/components/resume/report-panel";
 import { Notice, PageHeader } from "@/components/ui";
 import { aiProviders } from "@/lib/ai/client";
 import { loadProfileItems } from "@/lib/resume/profile";
+import type { TailoringReport } from "@/lib/resume/report";
 import { isTemplateId } from "@/lib/resume/templates";
 import type { ResumeDoc } from "@/lib/resume/types";
 import { validateDoc } from "@/lib/resume/validate";
@@ -50,6 +52,9 @@ export default async function EditorPage({ params }: PageProps<"/resume/[version
   } catch { /* history unavailable */ }
 
   const providers = aiProviders().map((p) => p.provider);
+  const verification = validateDoc(doc, items);
+  // The permanent record of what tailoring did (only tailored versions have one). RLS scopes it to the owner.
+  const { data: reportRow } = await db.from("tailoring_reports").select("report, created_at").eq("version_id", v.id).eq("user_id", user.id).maybeSingle();
   return (
     <>
       <PageHeader
@@ -58,7 +63,12 @@ export default async function EditorPage({ params }: PageProps<"/resume/[version
         sub="Click any bullet to improve it. AI can reword — it can never add a fact. Changes save automatically, every AI edit is kept in history, and the preview is exactly what the PDF and DOCX contain."
         actions={back}
       />
-      <ResumeEditor id={v.id} label={v.label} initial={doc} verification={validateDoc(doc, items)} template={isTemplateId(v.template) ? v.template : "classic"} aiConfigured={providers.length > 0} providers={providers} updatedAt={v.updated_at} />
+      <ResumeEditor id={v.id} label={v.label} initial={doc} verification={verification} template={isTemplateId(v.template) ? v.template : "classic"} aiConfigured={providers.length > 0} providers={providers} updatedAt={v.updated_at} />
+      {reportRow && (
+        <div className="mt-12 max-w-[760px]">
+          <TailoringReportPanel report={reportRow.report as TailoringReport} createdAt={reportRow.created_at as string} verifiedNow={{ ok: verification.ok, issues: verification.issues }} />
+        </div>
+      )}
     </>
   );
 }

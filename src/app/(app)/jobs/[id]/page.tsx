@@ -2,13 +2,17 @@ import { AlertTriangle, ArrowLeft, ArrowUpRight, Check } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AnalyzeJobButton } from "@/components/actions";
+import { EligibilityPanel, ReasonsPanel, ScoreBreakdown } from "@/components/match-detail";
 import { ApplyPanel } from "@/components/apply-panel";
 import { Reveal, Stagger } from "@/components/motion";
 import { Card, Chip, CompanyMark, Label, Notice, cx } from "@/components/ui";
 import { getJob } from "@/lib/data/jobs";
+import { loadMatchProfile } from "@/lib/discovery/agent";
 import { freshnessOf } from "@/lib/domain/freshness";
 import { matchConcerns, relevantEvidence } from "@/lib/domain/insights";
-import { authGuidance, learnSuggestion, type Gap, type Reason } from "@/lib/domain/match";
+import { checkEligibility } from "@/lib/domain/eligibility";
+import { explainMatch } from "@/lib/domain/explain";
+import { authGuidance, computeMatch, learnSuggestion, type Gap, type MatchJob, type Reason } from "@/lib/domain/match";
 import { loadProfileItems } from "@/lib/resume/profile";
 import { ago, deadlineLabel, longDate, miles, place, SOURCE_LABEL, TYPE_LABEL } from "@/lib/format";
 import { createSupabaseServer, requireUser } from "@/lib/supabase/server";
@@ -29,11 +33,12 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
   const detail = await getJob(db, id, user.id).catch(() => null);
   if (!detail) notFound();
   const { job, match, saved, application } = detail;
-  const [{ data: profile }, { count: resumes }, { data: latestResume }, profileItems] = await Promise.all([
+  const [{ data: profile }, { count: resumes }, { data: latestResume }, profileItems, matchProfile] = await Promise.all([
     db.from("profiles").select("work_authorization, graduation_year, radius_miles").eq("id", user.id).single(),
     db.from("resumes").select("id", { count: "exact", head: true }).eq("user_id", user.id),
     db.from("resume_versions").select("id").eq("user_id", user.id).neq("kind", "legacy").order("updated_at", { ascending: false }).limit(1).maybeSingle(),
     loadProfileItems(db, user.id),
+    loadMatchProfile(db, user.id),
   ]);
 
   const company = job.companies as { slug: string; name: string; careers_url: string | null; industry: string | null; is_sjsu: boolean };
@@ -46,7 +51,7 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
   const dl = deadlineLabel(job.deadline);
   const primary = sources[0];
   const closed = job.status !== "active";
-  const fresh = freshnessOf({ status: job.status, discovered_at: job.discovered_at, last_verified_at: job.last_verified_at, deadline: job.deadline });
+  const fresh = freshnessOf({ status: job.status, discovered_at: job.discovered_at, last_verified_at: job.last_verified_at, deadline: job.deadline, is_baseline: job.is_baseline });
   const concerns = matchConcerns({
     job: { title: job.title, description: job.description, isOnCampus: job.is_on_campus, isRemote: job.is_remote, status: job.status, discoveredAt: job.discovered_at, lastVerifiedAt: job.last_verified_at, deadline: job.deadline },
     profile: { graduationYear: profile?.graduation_year ?? null, workAuthorization: profile?.work_authorization ?? null, radiusMiles: profile?.radius_miles ?? 30 },
@@ -55,6 +60,22 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
   }).filter((c) => !(closed && /^(Closed|Expired)/.test(c.text))); // the closed notice already says this
   const evidence = relevantEvidence(profileItems, strong.filter((s) => s.kind === "skill").map((s) => s.label));
   const difficulty = match?.difficulty as "low" | "medium" | "high" | undefined;
+
+  // The transparent match, computed live from your CURRENT profile so the score, its breakdown, the eligibility verdict and
+  // the reasons are always one consistent picture (the list uses the stored copy, refreshed on every discovery run).
+  const matchJob: MatchJob = {
+    title: job.title, employmentType: job.employment_type, category: job.category, isOnCampus: job.is_on_campus,
+    lat: job.lat, lng: job.lng, city: job.city, isRemote: job.is_remote, isHybrid: job.is_hybrid, description: job.description,
+    requirements: reqs.map((r) => ({ slug: r.skills?.slug ?? null, label: r.label, kind: r.kind })),
+    status: job.status, deadline: job.deadline, hoursMax: job.hours_max, workStudy: job.work_study,
+  };
+  const live = matchProfile ? computeMatch(matchProfile, matchJob) : null;
+  const eligibility = matchProfile && live ? checkEligibility(matchProfile, matchJob, live.distanceMiles) : null;
+  const reasons = live ? explainMatch(live, eligibility) : null;
+  const shown = live ? { score: live.score } : match ? { score: match.score } : null;
+  // The eligibility panel already covers these; showing them twice would be noise.
+  const coveredByEligibility = /Ph\.D\.|professional experience|citizenship|Targets students graduating|application deadline/i;
+  const shownConcerns = eligibility ? concerns.filter((c) => !coveredByEligibility.test(c.text)) : concerns;
 
   const facts: [string, React.ReactNode][] = [
     ["Company", <Link key="c" href={`/companies/${company.slug}`} className="hover:underline">{company.name}</Link>],
@@ -99,12 +120,13 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
               <div className="flex flex-col gap-2">
                 <Label>Why this matches</Label>
                 <p className="text-[22px] leading-tight tracking-[-0.02em]">
-                  {match ? (match.score >= 75 ? "Strong match" : match.score >= 55 ? "Good match" : "Stretch role") : "Not scored yet"}
+                  {shown ? (shown.score >= 75 ? "Strong match" : shown.score >= 55 ? "Good match" : "Stretch role") : "Not scored yet"}
                 </p>
+                {reasons && <p className="max-w-[60ch] text-[13.5px] leading-snug text-muted">{reasons.headline}</p>}
               </div>
-              {match && (
+              {shown && (
                 <div className="flex flex-col items-end gap-1">
-                  <span className={cx("num font-mono text-[40px] font-light leading-none", match.score >= 75 ? "text-moss" : "text-text")}>{match.score}</span>
+                  <span className={cx("num font-mono text-[40px] font-light leading-none", shown.score >= 75 ? "text-moss" : "text-text")}>{shown.score}</span>
                   <span className="label">of 100</span>
                 </div>
               )}
@@ -127,6 +149,9 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
                 </ul>
               </div>
             </div>
+            {live && <ScoreBreakdown parts={live.breakdown} score={live.score} />}
+            {reasons && <ReasonsPanel reasons={reasons} />}
+            {eligibility && <EligibilityPanel result={eligibility} />}
             {(evidence.experience.length > 0 || evidence.projects.length > 0) && (
               <div className="flex flex-col gap-3 border-t-[0.5px] border-hairline-strong pt-5">
                 <Label>Your relevant experience</Label>
@@ -141,11 +166,11 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
                 <p className="text-[12px] text-dim">Only items you confirmed on your profile, matched by the words already in them.</p>
               </div>
             )}
-            {concerns.length > 0 && (
+            {shownConcerns.length > 0 && (
               <div className="flex flex-col gap-3 border-t-[0.5px] border-hairline-strong pt-5">
                 <Label className="!text-amber">Things to check</Label>
                 <ul className="flex flex-col gap-2">
-                  {concerns.map((c) => (
+                  {shownConcerns.map((c) => (
                     <li key={c.text} className="flex items-start gap-2.5 text-[14px]"><AlertTriangle size={14} strokeWidth={2} className={cx("mt-1 shrink-0", c.severity === "warn" ? "text-amber" : "text-dim")} />{c.text}</li>
                   ))}
                 </ul>
@@ -240,7 +265,7 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
                 <a key={s.url + s.source} href={s.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between gap-3 px-5 py-3.5 hover:bg-[rgb(var(--ink)/.03)]">
                   <span className="flex flex-col gap-0.5">
                     <span className="text-[14px]">{i === 0 ? (s.is_official ? "Original source: " : "Source: ") : "Also found on "}{s.source_name}</span>
-                    <span className="text-[12px] text-dim">{SOURCE_LABEL[s.source] ?? s.source} · first seen {ago(s.first_seen_at)} · last seen {ago(s.last_seen_at)}</span>
+                    <span className="text-[12px] text-dim">{SOURCE_LABEL[s.source] ?? s.source} · first seen {ago(s.first_seen_at)}{job.is_baseline && i === 0 ? " (already open when FRIDAY first looked at this employer)" : ""} · last seen {ago(s.last_seen_at)}</span>
                   </span>
                   <ArrowUpRight size={15} className="shrink-0 text-dim" />
                 </a>

@@ -1,0 +1,99 @@
+{
+  "_capture": {
+    "capturedAt": "2026-09-28T01:41:37.014Z",
+    "listUrl": "https://sjsurf.wd1.myworkdayjobs.com/wday/cxs/sjsurf/SJSURF/jobs",
+    "note": "every posting open at capture time; none was a student role"
+  },
+  "list": {
+    "total": 5,
+    "jobPostings": [
+      {
+        "title": "Accounting Manager",
+        "externalPath": "/job/Research-Foundation-Central-Office/Accounting-Manager_JR_2026_209",
+        "locationsText": "Research Foundation Central Office",
+        "postedOn": "Posted 4 Days Ago"
+      },
+      {
+        "title": "Accounts Receivable/Risk Accountant",
+        "externalPath": "/job/Research-Foundation-Central-Office/Accounts-Receivable-Risk-Accountant_JR_2026_208",
+        "locationsText": "Research Foundation Central Office",
+        "postedOn": "Posted 4 Days Ago"
+      },
+      {
+        "title": "Senior Research Associate",
+        "externalPath": "/job/NASA-AMES/Senior-Research-Associate_JR_2026_205",
+        "locationsText": "NASA AMES",
+        "postedOn": "Posted 16 Days Ago"
+      },
+      {
+        "title": "Senior Research Associate: Aerospace Engineering",
+        "externalPath": "/job/NASA-AMES/Senior-Research-Associate--Aerospace-Engineering_JR_2026_206",
+        "locationsText": "NASA AMES",
+        "postedOn": "Posted 17 Days Ago"
+      },
+      {
+        "title": "Associate Director, Post Award",
+        "externalPath": "/job/Research-Foundation-Central-Office/Associate-Director--Post-Award_JR_2026_195",
+        "locationsText": "Research Foundation Central Office",
+        "postedOn": "Posted 30+ Days Ago"
+      }
+    ],
+    "facets": [
+      {
+        "facetParameter": "jobFamilyGroup",
+        "descriptor": "Job Category",
+        "values": [
+          {
+            "descriptor": "Staff",
+            "id": "dd2b27a75afd10003ec52f432ef50000",
+            "count": 5
+          }
+        ]
+      },
+      {
+        "facetParameter": "workerSubType",
+        "descriptor": "Job Type",
+        "values": [
+          {
+            "descriptor": "Benefited",
+            "id": "dd2b27a75afd10003ebd9e0a59780001",
+            "count": 5
+          }
+        ]
+      },
+      {
+        "facetParameter": "timeType",
+        "descriptor": "Time Type",
+        "values": [
+          {
+            "descriptor": "Full time",
+            "id": "5b9df77e77561001ae110f83aac60000",
+            "count": 5
+          }
+        ]
+      },
+      {
+        "facetParameter": "locationMainGroup",
+        "values": [
+          {
+            "facetParameter": "locations",
+            "descriptor": "Locations",
+            "values": [
+              {
+                "descriptor": "NASA AMES",
+                "id": "dd2b27a75afd1000c916017ba84a0000",
+                "count": 2
+              },
+              {
+                "descriptor": "Research Foundation Central Office",
+                "id": "dd2b27a75afd1000c9166be6caef0000",
+                "count": 3
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "userAuthenticated": false
+  }
+}

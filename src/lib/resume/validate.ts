@@ -6,6 +6,7 @@
  */
 import { newFactsIn, skillsLineFacts } from "./guard";
 import { skillMentions } from "./parse";
+import { isSpellingVariant, sameSkill, undoTerms } from "./terminology";
 import { isEligible, type CandidateItem, type DocLine, type ResumeDoc } from "./types";
 
 export type Issue = { where: string; text: string; claim: string; reason: string };
@@ -66,6 +67,21 @@ export function validateDoc(doc: ResumeDoc, items: CandidateItem[]): { ok: boole
     for (const f of facts) issues.push({ where, text: l.text, claim: f.claim, reason: f.reason });
   };
 
+  // ATS terminology changes (see terminology.ts): a profile line may carry recorded renames of a skill's SPELLING. Each must be
+  // the same skill in the taxonomy, and the line is then checked as the student's profile wrote it — the rename is undone
+  // first, so it can never smuggle in a skill the evidence does not support. Only profile-origin lines are honoured.
+  const termsOk = (where: string, l: DocLine): boolean => {
+    if (l.origin !== "profile") return true;
+    for (const t of l.terms ?? []) {
+      if (!isSpellingVariant(t.from, t.to) || !sameSkill(t.from, t.to)) {
+        issues.push({ where, text: l.text, claim: `${t.from} → ${t.to}`, reason: "A terminology change may only rewrite a skill as another spelling of itself." });
+        return false;
+      }
+    }
+    return true;
+  };
+  const asWritten = (l: DocLine) => (l.origin === "profile" ? undoTerms(l.text, l.terms) : l.text);
+
   if (doc.header.origin !== "user") {
     const ev = norm(allEvidence);
     for (const c of doc.header.contact) if (!ev.includes(norm(c.replace(/^https?:\/\/(www\.)?/, "")))) issues.push({ where: "Header", text: c, claim: c, reason: "Not found in your profile." });
@@ -90,7 +106,7 @@ export function validateDoc(doc: ResumeDoc, items: CandidateItem[]): { ok: boole
       }
       for (const b of e.bullets) {
         if (b.origin === "ai") checkAi(`${s.title} · ${e.heading}`, b, e.sourceItemId, false);
-        else if (b.origin !== "user") check(`${s.title} · ${e.heading}`, b.text, b.sourceItemId ?? e.sourceItemId);
+        else if (b.origin !== "user" && termsOk(`${s.title} · ${e.heading}`, b)) check(`${s.title} · ${e.heading}`, asWritten(b), b.sourceItemId ?? e.sourceItemId);
       }
     }
     for (const l of s.lines) {
@@ -99,11 +115,13 @@ export function validateDoc(doc: ResumeDoc, items: CandidateItem[]): { ok: boole
         checkAi(s.title, l, null, s.kind === "skills");
         continue;
       }
+      if (!termsOk(s.title, l)) continue;
+      const written = asWritten(l);
       if (s.kind === "skills") {
-        for (const token of l.text.replace(/^[^:]{1,40}:\s*/, "").split(/\s*,\s*/)) {
+        for (const token of written.replace(/^[^:]{1,40}:\s*/, "").split(/\s*,\s*/)) {
           if (token && !skillNames.has(norm(token))) issues.push({ where: "Skills", text: l.text, claim: token, reason: "Not a confirmed skill in your profile." });
         }
-      } else check(s.title, l.text, l.sourceItemId);
+      } else check(s.title, written, l.sourceItemId);
     }
   }
   return { ok: issues.length === 0, issues };

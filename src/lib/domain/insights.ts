@@ -26,8 +26,8 @@ export type ConcernInput = {
   missingRequired: string[];
 };
 
-const ADVANCED = /\b(?:ph\.?d\.?|doctoral|master'?s(?: degree)? (?:required|only)|currently pursuing (?:a |an )?(?:ph\.?d|master))/i;
-const YEARS = /\b([3-9])\+?\s*(?:or more )?years?(?: of)?\s*(?:professional |industry |relevant |work )?experience/i;
+export const ADVANCED = /\b(?:ph\.?d\.?|doctoral|master'?s(?: degree)? (?:required|only)|currently pursuing (?:a |an )?(?:ph\.?d|master))/i;
+export const YEARS = /\b([3-9])\+?\s*(?:or more )?years?(?: of)?\s*(?:professional |industry |relevant |work )?experience/i;
 const GRAD_CLAUSE = /(?:graduat(?:e|es|ing|ion)|expected graduation)[^.\n]{0,80}/gi;
 
 /** Graduation years a posting says it targets, e.g. "graduating between December 2026 and June 2027" → [2026, 2027]. */

@@ -14,6 +14,9 @@ export type MatchProfile = {
   radiusMiles: number;
   workplace: "onsite" | "hybrid" | "remote" | "any";
   desiredTitles: string[];
+  /** Used by the eligibility check, never by the score. */
+  workAuthorization?: "f1" | "us_citizen" | "permanent_resident" | "other" | null;
+  graduationYear?: number | null;
 };
 
 export type MatchJob = {
@@ -28,10 +31,19 @@ export type MatchJob = {
   isHybrid: boolean;
   description: string | null;
   requirements: { slug: string | null; label: string; kind: "required" | "preferred" }[];
+  /** Used by the eligibility check, never by the score. */
+  status?: string;
+  deadline?: string | null;
+  hoursMax?: number | null;
+  workStudy?: "required" | "eligible" | "not_required" | "unknown";
 };
 
 export type Reason = { label: string; kind: "skill" | "role" | "profile" | "location" };
 export type Gap = { label: string; kind: "required" | "preferred" };
+
+/** One component of the score: what it earned out of what it could, and why, in plain words. The points sum to the score. */
+export type BreakdownPart = { key: "skills" | "role" | "profile" | "location"; label: string; points: number; max: number; detail: string };
+
 export type MatchResult = {
   score: number;
   strong: Reason[];
@@ -39,6 +51,8 @@ export type MatchResult = {
   difficulty: "low" | "medium" | "high";
   distanceMiles: number | null;
   tier: "strong" | "good" | "stretch";
+  /** Where every point of `score` came from. Sums to `score`. */
+  breakdown: BreakdownPart[];
 };
 
 const CS_MAJOR = /\b(?:computer science|computer engineering|software engineering|data science|cs|cmpe|se|electrical engineering|information|informatics|mathematics|math|statistics|applied data)\b/i;
@@ -49,6 +63,7 @@ export function computeMatch(p: MatchProfile, j: MatchJob): MatchResult {
   const missing: Gap[] = [];
   const have = new Set(p.skills);
   let score = 0;
+  const breakdown: BreakdownPart[] = [];
 
   // ── Skills (60) ──
   const req = j.requirements.filter((r) => r.kind === "required");
@@ -60,57 +75,96 @@ export function computeMatch(p: MatchProfile, j: MatchJob): MatchResult {
     if (covered(r)) strong.push({ label: nameOf(r), kind: "skill" });
     else missing.push({ label: nameOf(r), kind: r.kind });
   }
+  let skillPts: number;
+  let skillDetail: string;
   if (req.length + pref.length === 0) {
-    score += 30; // unknown requirements: neutral, not a penalty
+    skillPts = 30; // unknown requirements: neutral, not a penalty
+    skillDetail = "The posting lists no skills, so FRIDAY gives a neutral 30 of 60 rather than guessing.";
   } else {
     const reqRatio = req.filter(covered).length / (req.length || 1);
     const prefRatio = pref.filter(covered).length / (pref.length || 1);
     const coverage = req.length && pref.length ? reqRatio * 0.8 + prefRatio * 0.2 : req.length ? reqRatio : prefRatio;
     // Few listed requirements = little evidence: pull toward neutral (0.5) instead of claiming a perfect fit.
     const confidence = Math.min(1, (req.length + pref.length * 0.5) / 4);
-    score += Math.round(60 * (confidence * coverage + (1 - confidence) * 0.5));
+    skillPts = Math.round(60 * (confidence * coverage + (1 - confidence) * 0.5));
+    const counts = [req.length ? `${req.filter(covered).length} of ${req.length} required` : "", pref.length ? `${pref.filter(covered).length} of ${pref.length} preferred` : ""].filter(Boolean).join(" and ");
+    skillDetail = `You have ${counts} skills${confidence < 1 ? "; only a few skills are listed, so the score is pulled toward the middle rather than trusting a small sample" : ""}.`;
   }
+  score += skillPts;
+  breakdown.push({ key: "skills", label: "Skills", points: skillPts, max: 60, detail: skillDetail });
 
   // ── Role fit (15) ──
   const studentType = ["internship", "on_campus", "co_op", "research", "part_time"].includes(j.employmentType);
+  let rolePts = 0;
+  let roleDetail = "Not marked as a student or early-career role, so it earns no role points.";
   if (j.isOnCampus) {
     strong.push({ label: "SJSU on-campus position", kind: "role" });
     score += 15;
+    rolePts = 15;
+    roleDetail = "An SJSU on-campus position.";
   } else if (studentType) {
     strong.push({ label: j.employmentType === "internship" ? "Internship position" : "Student-friendly role", kind: "role" });
     score += 15;
+    rolePts = 15;
+    roleDetail = j.employmentType === "internship" ? "An internship." : "A student-friendly role.";
   } else if (/new grad|early career|entry/i.test(j.title)) {
     strong.push({ label: "Early-career role", kind: "role" });
     score += 8;
+    rolePts = 8;
+    roleDetail = "An early-career role (worth less than an internship or campus job).";
   }
   const wantsTitle = p.desiredTitles.some((t) => t && j.title.toLowerCase().includes(t.toLowerCase().replace(/\s*intern(ship)?$/, "")));
-  if (wantsTitle) strong.push({ label: "Matches a title you want", kind: "role" });
+  if (wantsTitle) {
+    strong.push({ label: "Matches a title you want", kind: "role" });
+    roleDetail += " It also matches a title you want (shown for context; it adds no points).";
+  }
+  breakdown.push({ key: "role", label: "Role type", points: rolePts, max: 15, detail: roleDetail });
 
   // ── Profile (10) ──
   const technical = j.category !== null && j.category !== "Product/Technical";
   // Hardware/embedded roles only count as a major fit if the student shows hardware skills.
   const hardwareOk = j.category !== "Embedded" || ["embedded", "verilog", "vhdl", "fpga", "computer-architecture", "assembly"].some((s) => have.has(s));
+  let profilePts = 0;
+  let profileDetail = "Your major is not recognised as related to this technical role, so it earns no profile points.";
   if (p.major && CS_MAJOR.test(p.major) && technical && hardwareOk) {
     strong.push({ label: `${shortMajor(p.major)} student`, kind: "profile" });
     score += 10;
+    profilePts = 10;
+    profileDetail = `Your major (${shortMajor(p.major)}) fits a technical role.`;
   } else if (!technical || j.isOnCampus) {
     score += 5;
+    profilePts = 5;
+    profileDetail = "Not a technical role (or on campus), so major matters less: a neutral 5 of 10.";
+  } else if (!p.major) {
+    profileDetail = "No major on your profile yet, so a technical role earns no profile points.";
+  } else if (j.category === "Embedded" && !hardwareOk) {
+    profileDetail = "Hardware and embedded roles count as a fit only when your skills show hardware experience.";
   }
+  breakdown.push({ key: "profile", label: "Profile fit", points: profilePts, max: 10, detail: profileDetail });
 
   // ── Location (15) ──
   let dist: number | null = null;
+  let locPts = 0;
+  let locDetail = "No location is known for this posting, so it earns no location points.";
   if (j.lat != null && j.lng != null) {
     dist = Math.round(distanceMiles(p.origin, { lat: j.lat, lng: j.lng }) * 10) / 10;
     if (dist <= p.radiusMiles) {
       strong.push({ label: j.isOnCampus ? "On campus" : `${j.city ?? "Nearby"} · ${dist < 1 ? "<1" : Math.round(dist)} mi`, kind: "location" });
-      score += dist <= 10 ? 15 : 11;
+      locPts = dist <= 10 ? 15 : 11;
+      locDetail = `${j.isOnCampus ? "On campus" : `About ${dist < 1 ? "under a mile" : `${Math.round(dist)} miles`} away`}, inside your ${p.radiusMiles}-mile radius${dist <= 10 ? "" : " (farther than 10 miles earns slightly less)"}.`;
     } else {
-      score += 3;
+      locPts = 3;
+      locDetail = `About ${Math.round(dist)} miles away, outside your ${p.radiusMiles}-mile radius, so only a token 3 of 15.`;
     }
   } else if (j.isRemote && p.workplace !== "onsite") {
     strong.push({ label: "Remote", kind: "location" });
-    score += 10;
+    locPts = 10;
+    locDetail = "Remote, and you are open to remote work.";
+  } else if (j.isRemote) {
+    locDetail = "Remote, but your profile prefers on-site work, so it earns no location points.";
   }
+  score += locPts;
+  breakdown.push({ key: "location", label: "Location", points: locPts, max: 15, detail: locDetail });
   if (j.isHybrid && (p.workplace === "hybrid" || p.workplace === "any")) strong.push({ label: "Hybrid", kind: "location" });
 
   score = Math.max(0, Math.min(100, score));
@@ -122,7 +176,7 @@ export function computeMatch(p: MatchProfile, j: MatchJob): MatchResult {
   else if ((j.isOnCampus || missingRequired === 0) && !/research scientist|phd/i.test(j.title)) difficulty = "low";
 
   const tier = score >= 75 ? "strong" : score >= 55 ? "good" : "stretch";
-  return { score, strong: dedupe(strong), missing: dedupeGaps(missing), difficulty, distanceMiles: dist, tier };
+  return { score, strong: dedupe(strong), missing: dedupeGaps(missing), difficulty, distanceMiles: dist, tier, breakdown };
 }
 
 function shortMajor(m: string) {

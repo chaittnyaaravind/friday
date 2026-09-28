@@ -92,7 +92,7 @@ async function search(db: SupabaseClient, intent: Intent, text: string, limit = 
       ]),
     };
   }
-  const order = { distance: "closest first", deadline: "soonest deadline first", new: "newest first", relevance: "best keyword match first", match: "best match first" }[f.sort ?? "match"];
+  const order = { distance: "closest first", deadline: "soonest deadline first", new: "newest first", first_seen: "most recently found first", relevance: "best keyword match first", match: "best match first" }[f.sort ?? "match"];
   return {
     tools: ["search_opportunities"],
     text: tidy([

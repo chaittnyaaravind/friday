@@ -77,19 +77,47 @@ export function classifyRole(title: string, opts: { onCampus?: boolean; commitme
   };
 }
 
-/** Parse "$45–$55/hr", "$8,000 - $9,500 / month", "$120K–$150K" into hourly-comparable numbers. */
-export function parsePay(text: string | null | undefined): { text: string; min: number | null; max: number | null } | null {
+export type PayUnit = "hour" | "week" | "month" | "year" | "semester";
+const PAY_UNITS: [RegExp, PayUnit, string][] = [
+  [/^(?:hours?|hrs?\.?|hourly)$/i, "hour", "/hr"],
+  [/^(?:weeks?|wk\.?|weekly)$/i, "week", "/wk"],
+  [/^(?:months?|mo\.?|monthly)$/i, "month", "/mo"],
+  [/^(?:years?|yr\.?|yearly|annually|annual)$/i, "year", "/yr"],
+  [/^(?:semesters?|terms?|quarters?)$/i, "semester", "/semester"],
+];
+/** A word after an amount that makes it a company figure, not pay ("$5 million in funding"). */
+const NOT_PAY = /^(?:million|billion|trillion|m|b|bn|mm)$/i;
+const PAY_RE = /\$\s?([\d,.]+)\s*(k)?\s*(?:(?:-|–|—|to)\s*\$?\s?([\d,.]+)\s*(k)?)?\s*(?:\/|per\s+|an?\s+|each\s+)?\s*([a-z]+\.?)?/gi;
+
+/**
+ * Parse "$45–$55/hr", "$8,000 - $9,500 / month", "$18 an hour", "$1,500 per semester", "$120K–$150K".
+ * `unit` is what the text STATES; it is null when the text names none and the label ("/hr", "/mo", "/yr") is only
+ * a guess from the size of the number. When a text holds several amounts, the first with a stated unit wins over a
+ * bare dollar figure (a bonus, a budget). Amounts are printed exactly: $9,500 is never rounded to $10K.
+ */
+export function parsePay(text: string | null | undefined): { text: string; min: number | null; max: number | null; unit: PayUnit | null } | null {
   if (!text) return null;
-  const m = text.match(/\$\s?([\d,.]+)\s*(k)?\s*(?:[-–—to]+\s*\$?\s?([\d,.]+)\s*(k)?)?\s*(?:\/|per\s+)?\s*(hour|hr|month|mo|year|yr|annually|annual)?/i);
-  if (!m) return null;
   const num = (v?: string, k?: string) => (v ? parseFloat(v.replace(/,/g, "")) * (k ? 1000 : 1) : null);
-  const min = num(m[1], m[2]);
-  const max = num(m[3], m[4] ?? m[2]) ?? min;
-  const unit = (m[5] ?? "").toLowerCase();
-  const label = unit.startsWith("h") ? "/hr" : unit.startsWith("mo") ? "/mo" : unit ? "/yr" : (min ?? 0) < 200 ? "/hr" : (min ?? 0) < 20000 ? "/mo" : "/yr";
-  const fmt = (n: number) => (n >= 1000 ? `$${Math.round(n / 1000)}K` : `$${Number.isInteger(n) ? n : n.toFixed(2)}`);
-  if (min == null) return null;
-  return { text: max && max !== min ? `${fmt(min)}–${fmt(max)}${label}` : `${fmt(min)}${label}`, min, max };
+
+  let fallback: { min: number; max: number } | null = null;
+  for (const m of text.matchAll(PAY_RE)) {
+    const word = (m[5] ?? "").trim().replace(/\.$/, ""); // "per hour." at the end of a sentence
+    if (NOT_PAY.test(word)) continue;
+    const min = num(m[1], m[2]);
+    if (min == null || Number.isNaN(min)) continue;
+    const max = num(m[3], m[4] ?? m[2]) ?? min;
+    const hit = PAY_UNITS.find(([rx]) => rx.test(word));
+    if (hit) return payResult(min, max, hit[1], hit[2]);
+    fallback ??= { min, max };
+  }
+  if (!fallback) return null;
+  const { min, max } = fallback;
+  return payResult(min, max, null, min < 200 ? "/hr" : min < 20000 ? "/mo" : "/yr");
+}
+
+const money = (n: number) => (n >= 1000 ? (n % 1000 === 0 ? `$${n / 1000}K` : `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`) : `$${Number.isInteger(n) ? n : n.toFixed(2)}`);
+function payResult(min: number, max: number, unit: PayUnit | null, label: string) {
+  return { text: max && max !== min ? `${money(min)}–${money(max)}${label}` : `${money(min)}${label}`, min, max, unit };
 }
 
 /** Very small HTML → text for descriptions (discovery never renders remote HTML). */

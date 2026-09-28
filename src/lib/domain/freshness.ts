@@ -15,6 +15,8 @@ export type FreshnessInput = {
   discovered_at: string | null;
   last_verified_at: string | null;
   deadline?: string | null;
+  /** Found on the employer's first crawl: already open when FRIDAY arrived, so its first-seen time is not "just opened". */
+  is_baseline?: boolean | null;
 };
 
 export type FreshnessInfo = { state: Freshness; label: string; detail: string };
@@ -39,7 +41,7 @@ export function freshnessOf(job: FreshnessInput, now: number = Date.now()): Fres
     return { state: "stale", label: "Stale", detail: `Last confirmed ${Math.floor(sinceVerified / DAY)} days ago. It may have closed — check the employer's page.` };
   }
   const found = job.discovered_at ? Date.parse(job.discovered_at) : NaN;
-  if (!Number.isNaN(found) && now - found <= NEW_DAYS * DAY && sinceVerified <= FRESH_HOURS * 3_600_000) {
+  if (!job.is_baseline && !Number.isNaN(found) && now - found <= NEW_DAYS * DAY && sinceVerified <= FRESH_HOURS * 3_600_000) {
     return { state: "new", label: "New", detail: "Found in the last few days and confirmed by its source." };
   }
   if (sinceVerified <= FRESH_HOURS * 3_600_000) return { state: "recent", label: "Recently verified", detail: "Confirmed open by its source within the last two days." };

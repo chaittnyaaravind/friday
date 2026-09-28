@@ -1,0 +1,305 @@
+{
+  "_capture": {
+    "capturedAt": "2026-09-28T01:41:37.014Z",
+    "listUrl": "https://api.smartrecruiters.com/v1/companies/ServiceNow/postings?q=intern&limit=100&country=us",
+    "detailUrl": "https://api.smartrecruiters.com/v1/companies/ServiceNow/postings/744000148836589",
+    "listedTotal": 87
+  },
+  "list": {
+    "offset": 0,
+    "limit": 100,
+    "totalFound": 87,
+    "content": [
+      {
+        "id": "744000148836589",
+        "name": "Finance Intern - Undergrad Summer 2027",
+        "uuid": "e4fbaa68-81d5-447c-ab7a-f115b5769425",
+        "jobAdId": "8b973e65-a11e-42fb-90ec-9e4f529ec9fc",
+        "defaultJobAd": false,
+        "refNumber": "JB0074794",
+        "company": {
+          "identifier": "ServiceNow",
+          "name": "ServiceNow"
+        },
+        "releasedDate": "2026-09-10T17:26:15.061Z",
+        "location": {
+          "city": "West Palm Beach",
+          "region": "Florida",
+          "country": "us",
+          "address": "525 Okeechobee Boulevard",
+          "postalCode": "33401",
+          "remote": false,
+          "hybrid": true,
+          "fullLocation": "West Palm Beach, Florida, United States"
+        },
+        "industry": {
+          "id": "it_and_services",
+          "label": "Information Technology And Services"
+        },
+        "department": {
+          "id": "2294072",
+          "label": "Finance & Accounting"
+        },
+        "function": {
+          "id": "other",
+          "label": "Other"
+        },
+        "typeOfEmployment": {
+          "id": "intern",
+          "label": "Intern"
+        },
+        "experienceLevel": {
+          "id": "not_applicable",
+          "label": "Not Applicable"
+        },
+        "customField": [
+          {
+            "fieldId": "60345fa28b4ba8595bef1863",
+            "fieldLabel": "Recruiting Team",
+            "valueId": "early-in-career",
+            "valueLabel": "Global Emerging Talent"
+          },
+          {
+            "fieldId": "60345d5c5165a31b17288279",
+            "fieldLabel": "Region",
+            "valueId": "722a833b93e4437798309f43c0d25990",
+            "valueLabel": "AMS - North America and Canada"
+          },
+          {
+            "fieldId": "6034601b43915a29a4b3389b",
+            "fieldLabel": "Job Location",
+            "valueId": "L_SJC005",
+            "valueLabel": "2225 Lawson Lane, Santa Clara, California, 95054, United States of America(L_SJC005)"
+          },
+          {
+            "fieldId": "60345e1a0b24a127cbdfa148",
+            "fieldLabel": "Employee Type",
+            "valueId": "d86e5e3e318f497985a090b7dcdbc8e6",
+            "valueLabel": "Intern (Fixed Term)"
+          },
+          {
+            "fieldId": "5f63a78f1dae5c5c4e54ba2b",
+            "fieldLabel": "Department",
+            "valueId": "2294072",
+            "valueLabel": "Finance & Accounting"
+          },
+          {
+            "fieldId": "COUNTRY",
+            "fieldLabel": "Country/Region",
+            "valueId": "us",
+            "valueLabel": "United States"
+          }
+        ],
+        "visibility": "PUBLIC",
+        "ref": "https://api.smartrecruiters.com/v1/companies/ServiceNow/postings/744000148836589",
+        "language": {
+          "code": "en",
+          "label": "English",
+          "labelNative": "English (US)"
+        }
+      },
+      {
+        "id": "744000151933359",
+        "name": "Sr. Staff Content Portfolio Manager, Platform/AI Implementation",
+        "uuid": "b5410b4d-b5d9-4fde-be88-cd9a9de2217d",
+        "jobAdId": "699114db-cf9d-40ff-b304-341ec4b58eb0",
+        "defaultJobAd": true,
+        "refNumber": "JB0075259",
+        "company": {
+          "identifier": "ServiceNow",
+          "name": "ServiceNow"
+        },
+        "releasedDate": "2026-09-25T20:20:02.528Z",
+        "location": {
+          "city": "San Diego",
+          "region": "CALIFORNIA",
+          "country": "us",
+          "address": "4810 Eastgate Mall",
+          "postalCode": "92121",
+          "remote": false,
+          "hybrid": true,
+          "hybridDescription": "Two-day in-office hybrid schedule",
+          "fullLocation": "San Diego, CALIFORNIA, United States"
+        },
+        "industry": {
+          "id": "it_and_services",
+          "label": "Information Technology And Services"
+        },
+        "department": {
+          "id": "7913371",
+          "label": "Low Code Experience Product Content"
+        },
+        "function": {
+          "id": "writing_editing",
+          "label": "Writing/Editing"
+        },
+        "typeOfEmployment": {
+          "id": "permanent",
+          "label": "Full-time"
+        },
+        "experienceLevel": {
+          "id": "not_applicable",
+          "label": "Not Applicable"
+        },
+        "customField": [
+          {
+            "fieldId": "60345fa28b4ba8595bef1863",
+            "fieldLabel": "Recruiting Team",
+            "valueId": "professional",
+            "valueLabel": "Professional"
+          },
+          {
+            "fieldId": "60345d5c5165a31b17288279",
+            "fieldLabel": "Region",
+            "valueId": "722a833b93e4437798309f43c0d25990",
+            "valueLabel": "AMS - North America and Canada"
+          },
+          {
+            "fieldId": "6034601b43915a29a4b3389b",
+            "fieldLabel": "Job Location",
+            "valueId": "L_RMTE_CA",
+            "valueLabel": "Remote, CA, USA(L_RMTE_CA)"
+          },
+          {
+            "fieldId": "60345e1a0b24a127cbdfa148",
+            "fieldLabel": "Employee Type",
+            "valueId": "0082f6cbe6154da19322cbab1f6aa5af",
+            "valueLabel": "Regular"
+          },
+          {
+            "fieldId": "5f63a78f1dae5c5c4e54ba2b",
+            "fieldLabel": "Department",
+            "valueId": "7913371",
+            "valueLabel": "Low Code Experience Product Content"
+          },
+          {
+            "fieldId": "COUNTRY",
+            "fieldLabel": "Country/Region",
+            "valueId": "us",
+            "valueLabel": "United States"
+          }
+        ],
+        "visibility": "PUBLIC",
+        "ref": "https://api.smartrecruiters.com/v1/companies/ServiceNow/postings/744000151933359",
+        "creator": {
+          "name": "Desiree Quan"
+        },
+        "language": {
+          "code": "en",
+          "label": "English",
+          "labelNative": "English (US)"
+        }
+      }
+    ]
+  },
+  "detail": {
+    "id": "744000148836589",
+    "name": "Finance Intern - Undergrad Summer 2027",
+    "uuid": "e4fbaa68-81d5-447c-ab7a-f115b5769425",
+    "jobId": "b61426ef-13c9-4a57-9eaf-8f66c01547c9",
+    "jobAdId": "8b973e65-a11e-42fb-90ec-9e4f529ec9fc",
+    "defaultJobAd": false,
+    "refNumber": "JB0074794",
+    "company": {
+      "name": "ServiceNow",
+      "identifier": "ServiceNow"
+    },
+    "location": {
+      "city": "West Palm Beach",
+      "region": "Florida",
+      "country": "us",
+      "address": "525 Okeechobee Boulevard",
+      "postalCode": "33401",
+      "remote": false,
+      "hybrid": true,
+      "fullLocation": "West Palm Beach, Florida, United States"
+    },
+    "customField": [
+      {
+        "fieldId": "60345fa28b4ba8595bef1863",
+        "fieldLabel": "Recruiting Team",
+        "valueId": "early-in-career",
+        "valueLabel": "Global Emerging Talent"
+      },
+      {
+        "fieldId": "60345e1a0b24a127cbdfa148",
+        "fieldLabel": "Employee Type",
+        "valueId": "d86e5e3e318f497985a090b7dcdbc8e6",
+        "valueLabel": "Intern (Fixed Term)"
+      },
+      {
+        "fieldId": "5f63a78f1dae5c5c4e54ba2b",
+        "fieldLabel": "Department",
+        "valueId": "2294072",
+        "valueLabel": "Finance & Accounting"
+      },
+      {
+        "fieldId": "COUNTRY",
+        "fieldLabel": "Country/Region",
+        "valueId": "us",
+        "valueLabel": "United States"
+      }
+    ],
+    "releasedDate": "2026-09-10T17:26:15.061Z",
+    "creator": {
+      "name": "",
+      "avatarUrl": ""
+    },
+    "postingUrl": "https://jobs.smartrecruiters.com/ServiceNow/744000148836589-finance-intern-undergrad-summer-2027",
+    "applyUrl": "https://jobs.smartrecruiters.com/ServiceNow/744000148836589-finance-intern-undergrad-summer-2027?oga=true",
+    "referralUrl": "https://jobs.smartrecruiters.com/external-referrals/company/ServiceNow/publication/e4fbaa68-81d5-447c-ab7a-f115b5769425?dcr_ci=ServiceNow",
+    "jobAd": {
+      "sections": {
+        "companyDescription": {
+          "title": "Company Description",
+          "text": "<p>It all started when engineer Fred Luddy wrote code that automated a tedious task for his coworker, Phyllis. She cried tears of joy. That moment inspired Fred to build a company that could do that for everyone—freeing people from busywork so they could focus on meaningful work. Today, ServiceNow is the AI control tower for business reinvention. Our ServiceNow AI platform brings together any AI, any data, and any workflow— helping 85% of the Fortune 500® work smarter, faster, and better. We're building an AI-native culture where technology and talent are unstoppable together. And we're just getting started.</p><p>Join us to put AI to work for people.</p>"
+        },
+        "jobDescription": {
+          "title": "Job Description",
+          "text": "<p><strong>About the Role:</strong></p><p>We are seeking strategic, curious and driven&#xa0;<strong>Finance Interns</strong>&#xa0;to join our&#xa0;<strong>Finance Intern Program.</strong>&#xa0;Interns will be placed within a specific finance function through a matching process. In your placement, you’ll contribute to meaningful projects and gain valuable, hands-on experience in a&#xa0;<strong>12-week long summer internship</strong>.</p><p>We are seeking students with an&#xa0;<strong>AI first mindset</strong>&#xa0;—those eager to think differently, challenge the status quo, and help shape the future of finance. As Customer Zero, our finance team plays a critical role in advancing ServiceNow’s company priorities: leading in AI innovation, driving scalable growth, and delivering operational excellence. This is an exciting opportunity to build foundational finance skills while contributing innovative thinking to a rapidly evolving business landscape</p><p>High-performing interns that are graduating the next summer may be considered for full-time opportunities through our Finance Development Rotation Program (FDRP), a post-graduate program designed to accelerate careers through structured rotations, mentorship, and exposure to finance leadership.</p><p>Opportunities are available across multiple teams and may include:</p><ul><li>Financial Planning &amp; Analysis</li><li>Corporate Accounting &amp; Financial Services</li><li>Go-To-Market Finance</li><li>Treasury</li><li>Strategic Finance</li></ul><p><strong>What you’ll do:</strong></p><ul><li>Contribute to high-impact projects that support financial decision-making across the business</li><li>Analyze financial data, build models&#xa0;, and prepare insights that influence budgets, forecasts, and strategic plans</li><li>Support month-end and quarter-close processes, reporting, and variance analysis</li><li>Partner cross-functionally with teams across the business</li><li>Participate in intern programming, development workshops, and networking events</li></ul>"
+        },
+        "qualifications": {
+          "title": "Qualifications",
+          "text": "<p><strong>Who you are:</strong></p><ul><li>Experience in leveraging or critically thinking about how to integrate AI into work processes, decision-making, or problem-solving. This may include using AI-powered tools, automating workflows, analyzing AI-driven insights, or exploring AI's potential impact on the function or industry.</li><li>Able to commit to a 12-week summer internship at our headquarters in Santa Clara</li><li>Currently pursuing a Bachelor’s in Finance, Accounting, Economics, Business, or a related field with a December 2027&#xa0;or later graduation date</li><li>Excellent communication skills, both written and verbal&#xa0;&#xa0;</li><li>Experience with finance and accounting concepts through coursework or prior work/internship experience</li><li>Demonstrated curiosity and interest in AI, with a passion for exploring how artificial intelligence can improve finance processes and decision-making</li><li>Experience using AI tools and automated workflows is a plus</li><li>Self-starter with strong initiative, attention to detail, and excellent organizational skills</li><li>Proficiency in MS Office Suite (Word, Excel, Outlook, PowerPoint)</li></ul><p><strong>Why work with us:</strong></p><ul><li>Join a finance team that is a pioneer in applying AI to transform finance workflows and decision-making</li><li>Work on meaningful projects that directly impact business outcomes while building foundational finance skills</li><li>Experience a supportive and collaborative environment that encourages curiosity, innovation, and growth</li><li>Participate in development workshops, networking events, and mentorship programs designed to accelerate your learning</li><li>Be part of a fast-growing SaaS company where your work contributes to scalable growth and operational excellence</li></ul><p>For positions in this location, we offer a base pay of $37.56/hr, plus equity (when applicable), variable/incentive compensation and benefits. Sales positions generally offer a competitive On Target Earnings (OTE) incentive compensation structure. Please note that the base pay shown is a guideline, and individual total compensation will vary based on factors such as qualifications, skill level, competencies, and work location. We also offer health plans, including flexible spending accounts, a 401(k) Plan with company match, ESPP, matching donations, a flexible time away plan and family leave programs. Compensation is based on the geographic location in which the role is located and is subject to change based on work location.</p>"
+        },
+        "additionalInformation": {
+          "title": "Additional Information",
+          "text": "<p><strong>Work Personas</strong></p><p>We approach our distributed world of work with flexibility and trust. Work personas (flexible, remote, or required in office) are categories that are assigned to ServiceNow employees depending on the nature of their work and their assigned work location.&#xa0;<a href=\"https://careers.servicenow.com/life-at-servicenow#workpersonas\" rel=\"noopener noreferrer\"><u>Learn more here</u></a>. To determine eligibility for a work persona, ServiceNow may confirm the distance between your primary residence and the closest ServiceNow office using a third-party service.</p><p><strong>Equal Opportunity Employer</strong></p><p>ServiceNow is an equal opportunity employer. All qualified applicants will receive consideration for employment without regard to race, color, religion, sex, sexual orientation, national origin, age, disability, gender identity,&#xa0; veteran status, or any other category protected by law. In addition, all qualified applicants with arrest or conviction records will be considered for employment in accordance with legal requirements. &#xa0;</p><p><strong>Accommodations</strong></p><p>We strive to create an accessible and inclusive experience for all candidates. If you require a reasonable accommodation to complete any part of the application process, or are unable to use this online application and need an alternative method to apply, please contact&#xa0;<a href=\"mailto:globaltalentss@servicenow.com\" rel=\"noopener noreferrer\">globaltalentss@servicenow.com&#xa0;</a>for assistance.&#xa0;</p><p><strong>Export Control Regulations</strong></p><p>For positions requiring access to controlled technology subject to export control regulations, including the U.S. Export Administration Regulations (EAR), ServiceNow may be required to obtain export control approval from government authorities for certain individuals. All employment is contingent upon ServiceNow obtaining any export license or other approval that may be required by relevant export control authorities.&#xa0;</p><p>From Fortune. ©2026 Fortune Media IP Limited. All rights reserved. Used under license.</p>"
+        }
+      }
+    },
+    "compensation": {
+      "max": 37.56,
+      "currency": "USD",
+      "period": "HOURLY"
+    },
+    "active": true,
+    "visibility": "PUBLIC",
+    "industry": {
+      "id": "it_and_services",
+      "label": "Information Technology And Services"
+    },
+    "function": {
+      "id": "other",
+      "label": "Other"
+    },
+    "department": {
+      "id": 2294072,
+      "label": "Finance & Accounting"
+    },
+    "experienceLevel": {
+      "id": "not_applicable",
+      "label": "Not Applicable"
+    },
+    "typeOfEmployment": {
+      "id": "intern",
+      "label": "Intern"
+    },
+    "language": {
+      "code": "en",
+      "label": "English",
+      "labelNative": "English (US)"
+    }
+  },
+  "detailFor": "744000148836589"
+}

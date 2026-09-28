@@ -15,13 +15,13 @@ export default async function ResumePage() {
   const [status, { data: resumes }, { data: versions }, { data: skills }] = await Promise.all([
     resumeStatus(db, user.id),
     db.from("resumes").select("id, file_name, is_primary, created_at").eq("user_id", user.id).order("created_at", { ascending: false }),
-    db.from("resume_versions").select("id, label, kind, updated_at, source_version_id, jobs(title, companies(name))").eq("user_id", user.id).order("updated_at", { ascending: false }),
+    db.from("resume_versions").select("id, label, kind, is_master, updated_at, source_version_id, jobs(title, companies(name))").eq("user_id", user.id).order("updated_at", { ascending: false }),
     db.from("profile_skills").select("source, skills(name)").eq("user_id", user.id),
   ]);
 
   const rows: VersionRow[] = (versions ?? []).map((v) => {
     const job = v.jobs as unknown as { title: string; companies: { name: string } | null } | null;
-    return { id: v.id, label: v.label, kind: v.kind, when: ago(v.updated_at), job: job ? job.companies?.name ?? job.title : null, copied: Boolean(v.source_version_id) };
+    return { id: v.id, label: v.label, kind: v.kind, when: ago(v.updated_at), job: job ? job.companies?.name ?? job.title : null, copied: Boolean(v.source_version_id), master: Boolean(v.is_master) };
   });
   const canBuild = status.extracted > 0;
 

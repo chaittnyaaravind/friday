@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { TailorReview } from "@/components/resume/tailor";
 import { EmptyState, LinkButton, PageHeader } from "@/components/ui";
 import { loadProfileItems, loadTailorJob } from "@/lib/resume/profile";
-import { tailorProposal } from "@/lib/resume/tailor";
+import { buildTailored, tailorProposal } from "@/lib/resume/tailor";
+import { applyTerminology } from "@/lib/resume/terminology";
 import { createSupabaseServer, requireUser } from "@/lib/supabase/server";
 
 export const metadata = { title: "Tailor resume" };
@@ -34,10 +35,14 @@ export default async function TailorPage({ params }: PageProps<"/resume/tailor/[
     );
   }
 
+  // The same computation `tailorResume` does for a preview, so the spelling changes shown here are exactly the ones that will be made.
+  const proposal = tailorProposal(items, job);
+  const jobText = [job.title, job.description, job.requirements.join("\n")].filter(Boolean).join("\n");
+  const { changes: terminology } = applyTerminology(buildTailored(items, proposal, proposal.options.exclude), jobText);
   return (
     <>
       {header}
-      <TailorReview proposal={tailorProposal(items, job)} />
+      <TailorReview proposal={proposal} terminology={terminology} />
     </>
   );
 }

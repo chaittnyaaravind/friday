@@ -41,6 +41,26 @@ describe("freshnessOf — only claims what the evidence supports", () => {
   });
 });
 
+describe("freshnessOf — baseline jobs (already open when FRIDAY first crawled the employer)", () => {
+  it("a baseline job discovered moments ago is NOT 'new': first seen is not 'just opened'", () => {
+    const f = freshnessOf(job({ discovered_at: ago(1), last_verified_at: ago(1), is_baseline: true }), NOW);
+    expect(f.state).toBe("recent");
+    expect(f.state).not.toBe("new");
+  });
+  it("a baseline job is still reported honestly on every other axis", () => {
+    expect(freshnessOf(job({ discovered_at: ago(1), last_verified_at: ago(24 * 5), is_baseline: true }), NOW).state).toBe("active");
+    expect(freshnessOf(job({ discovered_at: ago(1), last_verified_at: ago(24 * 20), is_baseline: true }), NOW).state).toBe("stale");
+    expect(freshnessOf(job({ status: "closed", is_baseline: true }), NOW).state).toBe("closed");
+    expect(freshnessOf(job({ deadline: "2026-09-01", is_baseline: true }), NOW).state).toBe("expired");
+  });
+  it("EXISTING BEHAVIOR: without the flag (or with it false/null) a fresh find is 'new' exactly as before", () => {
+    const fresh = { discovered_at: ago(10), last_verified_at: ago(2) };
+    expect(freshnessOf(job(fresh), NOW).state).toBe("new");
+    expect(freshnessOf(job({ ...fresh, is_baseline: false }), NOW).state).toBe("new");
+    expect(freshnessOf(job({ ...fresh, is_baseline: null }), NOW).state).toBe("new");
+  });
+});
+
 describe("archiveCutoff", () => {
   it("is exactly ARCHIVE_DAYS before now", () => {
     expect(Date.parse(archiveCutoff(NOW))).toBe(NOW - ARCHIVE_DAYS * 86_400_000);

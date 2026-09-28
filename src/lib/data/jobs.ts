@@ -3,6 +3,8 @@
  * All reads go through the signed-in user's client, so RLS scopes matches/saves.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { CAMPUS_EMPLOYERS, CAMPUS_ROLES, type CampusEmployer, type CampusRole } from "@/lib/domain/campus";
+import { firstSeenAfter, isWindow, todayISODate } from "@/lib/domain/hunt";
 import type { Gap, Reason } from "@/lib/domain/match";
 
 export type JobListItem = {
@@ -37,6 +39,15 @@ export type JobListItem = {
   saved: boolean;
   sources: { source: string; name: string; url: string; official: boolean }[];
   total_count: number;
+  /** Already open when FRIDAY first crawled its employer: first-seen is not "just opened". */
+  is_baseline: boolean;
+  /** The weekly cap the posting states (the in-session one when it gives two). */
+  hours_max: number | null;
+  /** Every campus role the title names (empty until the job's source has been read since roles were recorded). */
+  campus_roles: string[] | null;
+  campus_employer: string | null;
+  /** The eligibility verdict for the signed-in student, or null before their matches have been recomputed. */
+  eligibility: "clear" | "verify" | "blocked" | null;
 };
 
 export type JobFilters = {
@@ -57,16 +68,28 @@ export type JobFilters = {
   levels?: (typeof LEVELS)[number][];
   hideAuthRestricted?: boolean;
   savedOnly?: boolean;
-  sort?: "match" | "new" | "distance" | "deadline" | "relevance";
+  /** Only jobs FRIDAY first saw at/after this instant (ISO); never baseline jobs. See domain/hunt.ts. */
+  firstSeenAfter?: string;
+  excludeBaseline?: boolean;
+  /** Only jobs with a stated deadline on/after this date (YYYY-MM-DD). */
+  deadlineAfter?: string;
+  /** Only jobs the signed-in student's match score reaches. */
+  minScore?: number;
+  /** SJSU: jobs naming ANY of these campus roles / posted by ANY of these campus employers. */
+  campusRoles?: CampusRole[];
+  campusEmployers?: CampusEmployer[];
+  /** Hide jobs whose eligibility verdict for the signed-in student is "blocked". Jobs with no verdict yet are never hidden. */
+  hideBlocked?: boolean;
+  sort?: "match" | "new" | "distance" | "deadline" | "relevance" | "first_seen";
   limit?: number;
   offset?: number;
 };
 
 /** The values each enum-like filter accepts. Anything else is invalid input, never passed to the database. */
 export const EMPLOYMENT_TYPES = ["internship", "on_campus", "part_time", "full_time", "research", "co_op"] as const;
-export const SOURCE_TYPES = ["greenhouse", "lever", "ashby", "smartrecruiters", "workday", "amazon", "microsoft", "sjsu_page", "handshake_import", "linkedin_import", "indeed_import", "manual", "usajobs", "adzuna"] as const;
+export const SOURCE_TYPES = ["greenhouse", "lever", "ashby", "smartrecruiters", "workday", "amazon", "microsoft", "sjsu_page", "pinpoint", "handshake_import", "linkedin_import", "indeed_import", "manual", "usajobs", "adzuna"] as const;
 export const LEVELS = ["new_grad", "entry"] as const;
-export const SORTS = ["match", "new", "distance", "deadline", "relevance"] as const;
+export const SORTS = ["match", "new", "distance", "deadline", "relevance", "first_seen"] as const;
 export const POSTED_WITHIN = { "24h": 1, "3d": 3, "7d": 7, "30d": 30 } as const;
 
 const list = (v: string | null) => (v ? v.split(",").map((s) => s.trim()).filter(Boolean) : undefined);
@@ -89,17 +112,40 @@ export function invalidFilterParams(sp: URLSearchParams): string[] {
   badList("source", SOURCE_TYPES);
   badList("provider", SOURCE_TYPES);
   badList("level", LEVELS);
+  badList("campusRole", CAMPUS_ROLES);
+  badList("campusEmployer", CAMPUS_EMPLOYERS);
   const sort = sp.get("sort");
   if (sort && !(SORTS as readonly string[]).includes(sort)) bad.push("sort");
   const posted = sp.get("postedWithin");
   if (posted && !(posted in POSTED_WITHIN)) bad.push("postedWithin");
-  for (const k of ["miles", "radius", "posted", "deadline", "limit", "offset", "page"]) {
+  for (const k of ["miles", "radius", "posted", "deadline", "limit", "offset", "page", "minScore", "closing"]) {
     const v = sp.get(k);
     if (v && (!Number.isFinite(Number(v)) || Number(v) < 0)) bad.push(k);
   }
+  const firstSeen = sp.get("firstSeen");
+  if (firstSeen && firstSeen !== "today" && !isWindow(firstSeen)) bad.push("firstSeen");
   const q = sp.get("q");
   if (q && q.length > 200) bad.push("q");
   return bad;
+}
+
+/**
+ * The "what just opened" parameters: firstSeen=15m|1h|6h|24h|today, newOnly=1, minScore=0-100, closing=<days>.
+ * Each is optional; when none is given nothing here is set and the search behaves exactly as before.
+ */
+export function huntParams(get: (k: string) => string | null, now: number): Pick<JobFilters, "firstSeenAfter" | "excludeBaseline" | "deadlineAfter" | "minScore" | "deadlineWithinDays"> {
+  const out: ReturnType<typeof huntParams> = {};
+  const fs = get("firstSeen");
+  if (fs === "today" || isWindow(fs)) out.firstSeenAfter = firstSeenAfter(fs, now);
+  if (bool(get("newOnly"))) out.excludeBaseline = true;
+  const min = clamp(num(get("minScore")), 0, 100);
+  if (min !== undefined) out.minScore = min;
+  const closing = clamp(num(get("closing")), 1, 60);
+  if (closing !== undefined) {
+    out.deadlineAfter = todayISODate(now);
+    out.deadlineWithinDays = closing;
+  }
+  return out;
 }
 
 /** Parse URL search params (page URLs and /api/jobs query strings share one format). */
@@ -134,6 +180,10 @@ export function parseFilters(sp: URLSearchParams | Record<string, string | strin
     levels: only(list(get("level")), LEVELS),
     hideAuthRestricted: bool(get("hideRestricted")),
     savedOnly: bool(get("saved")),
+    ...huntParams(get, Date.now()),
+    campusRoles: only(list(get("campusRole")), CAMPUS_ROLES),
+    campusEmployers: only(list(get("campusEmployer")), CAMPUS_EMPLOYERS),
+    hideBlocked: bool(get("hideBlocked")),
     sort: sort && (SORTS as readonly string[]).includes(sort) ? sort : undefined,
     limit,
     offset: clamp(num(get("offset")), 0, 1_000_000) ?? (page && limit ? (page - 1) * limit : page ? (page - 1) * 30 : undefined),
@@ -164,6 +214,13 @@ export async function searchJobs(db: SupabaseClient, f: JobFilters) {
     p_limit: f.limit ?? 30,
     p_offset: f.offset ?? 0,
     p_levels: f.levels?.length ? f.levels : null,
+    p_first_seen_after: f.firstSeenAfter ?? null,
+    p_exclude_baseline: f.excludeBaseline ?? false,
+    p_deadline_after: f.deadlineAfter ?? null,
+    p_min_score: f.minScore ?? null,
+    p_campus_roles: f.campusRoles?.length ? f.campusRoles : null,
+    p_campus_employers: f.campusEmployers?.length ? f.campusEmployers : null,
+    p_hide_blocked: f.hideBlocked ?? false,
   });
   if (error) throw error;
   const rows = (data ?? []) as JobListItem[];

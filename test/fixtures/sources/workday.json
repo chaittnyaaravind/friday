@@ -1,0 +1,156 @@
+{
+  "_capture": {
+    "capturedAt": "2026-09-28T01:41:37.014Z",
+    "listUrl": "https://nvidia.wd5.myworkdayjobs.com/wday/cxs/nvidia/NVIDIAExternalCareerSite/jobs",
+    "note": "list.total is rewritten to the number of kept postings so the adapter's paging loop ends; the live total was 1010"
+  },
+  "list": {
+    "total": 2,
+    "jobPostings": [
+      {
+        "title": "Applied Deep Learning PhD Research Intern, Reinforcement Learning for LLMs - Fall 2026",
+        "externalPath": "/job/US-CA-Santa-Clara/Applied-Deep-Learning-PhD-Research-Intern--Reinforcement-Learning-for-LLMs---Fall-2026_JR2012398",
+        "locationsText": "US, CA, Santa Clara",
+        "postedOn": "Posted 30+ Days Ago",
+        "bulletFields": [
+          "JR2012398"
+        ]
+      },
+      {
+        "title": "PhD Software Engineering Intern, Decision Intelligence - Fall 2026",
+        "externalPath": "/job/US-CA-Santa-Clara/PhD-Software-Engineering-Intern--Decision-Intelligence---Fall-2026_JR2017522",
+        "locationsText": "US, CA, Santa Clara",
+        "postedOn": "Posted 30+ Days Ago",
+        "bulletFields": [
+          "JR2017522"
+        ]
+      }
+    ]
+  },
+  "details": {
+    "/job/US-CA-Santa-Clara/Applied-Deep-Learning-PhD-Research-Intern--Reinforcement-Learning-for-LLMs---Fall-2026_JR2012398": {
+      "jobPostingInfo": {
+        "id": "af21806e67421005c8b0387cc1bb0000",
+        "title": "Applied Deep Learning PhD Research Intern, Reinforcement Learning for LLMs - Fall 2026",
+        "jobDescription": "<p>We are looking for PhD research interns excited to advance the next generation of large language models through reinforcement learning. Our applied deep learning research team at NVIDIA has helped pioneer projects such as Megatron, MT-NLG, and DLSS. We build state-of-the-art foundation models and develop new methods to improve their reasoning, alignment, reliability, and ability to solve real-world tasks.</p><p></p><p>This internship will focus on algorithmic research at the intersection of reinforcement learning and large language models. You will design, implement, and evaluate new RL-based methods for improving LLM behavior, with a strong emphasis on hands-on experimentation and rapid prototyping at scale.</p><p></p><p><b>What you will be doing:</b></p><ul><li><p>Develop and prototype reinforcement learning algorithms for large language models</p></li><li><p>Explore methods for improving reasoning, alignment, instruction following, and multi-turn interaction</p></li><li><p>Design experiments to evaluate model behavior, robustness, hallucination, and task performance</p></li><li><p>Implement research ideas in Python and PyTorch, and run experiments on large-scale GPU clusters</p></li></ul><p></p><p><b>What we need to see:</b></p><ul><li><p>Pursuing a PhD in AI, ML, CS, CE, EE, Math, Physics, or a related field</p></li><li><p>Strong background in reinforcement learning and natural language processing</p></li><li><p>Excellent programming skills, especially in Python</p></li><li><p>Experience with deep learning frameworks such as PyTorch</p></li><li><p>Comfort with experimental research, debugging models, and working with large-scale training pipelines</p></li></ul><p></p><p><b>Ways to stand out from the crowd:</b></p><ul><li><p>Publications or open-source contributions in RL, LLMs, alignment, reasoning, or post-training</p></li><li><p>Experience with RLHF, RLAIF, policy optimization, reward modeling, or agentic LLM systems</p></li><li><p>Strong intuition for both algorithms and large-scale implementation</p></li></ul><p></p><p>If you are excited about using reinforcement learning to make language models more capable, reliable, and useful, this team could be a great fit.</p><p style=\"text-align:inherit\"></p><p style=\"text-align:inherit\"></p>Our internship hourly rates are a standard pay based on the position, your location, year in school, degree, and experience. The hourly rate for our interns is 30 USD - 94 USD.&amp;#xa;<p style=\"text-align:inherit\"></p><p style=\"text-align:left\"><span><span>You will also be eligible for Intern</span></span><span><span> </span><a href=\"https://www.nvidia.com/en-us/benefits/interns/\" target=\"_blank\"><span><span>benefits</span></span></a>. </span><span><span>​</span></span></p><p style=\"text-align:inherit\"></p><p style=\"text-align:inherit\"></p>Applications for this job will be accepted at least until May 10, 2026.<p></p><p>This posting is for an existing vacancy. </p><p>NVIDIA uses AI tools in its recruiting pr",
+        "location": "US, CA, Santa Clara",
+        "postedOn": "Posted 30+ Days Ago",
+        "startDate": "2026-05-06",
+        "timeType": "Full time",
+        "jobReqId": "JR2012398",
+        "jobPostingId": "Applied-Deep-Learning-PhD-Research-Intern--Reinforcement-Learning-for-LLMs---Fall-2026_JR2012398",
+        "jobPostingSiteId": "NVIDIAExternalCareerSite",
+        "country": {
+          "descriptor": "United States of America",
+          "id": "bc33aa3152ec42d4995f4791a106ed09"
+        },
+        "canApply": true,
+        "posted": true,
+        "includeResumeParsing": true,
+        "jobRequisitionLocation": {
+          "descriptor": "US, CA, Santa Clara",
+          "country": {
+            "descriptor": "United States of America",
+            "id": "bc33aa3152ec42d4995f4791a106ed09",
+            "alpha2Code": "US"
+          }
+        },
+        "externalUrl": "https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite/job/US-CA-Santa-Clara/Applied-Deep-Learning-PhD-Research-Intern--Reinforcement-Learning-for-LLMs---Fall-2026_JR2012398",
+        "questionnaireId": "3403860341171001f57d5c603f290000"
+      },
+      "hiringOrganization": {
+        "name": "2100 NVIDIA USA",
+        "url": ""
+      },
+      "similarJobs": [
+        {
+          "title": "Research Scientist, Efficient Deep Learning - New College Grad 2026",
+          "externalPath": "/job/US-CA-Santa-Clara/Research-Scientist--Efficient-Deep-Learning---New-College-Grad-2026_JR2019729-1",
+          "timeType": "Full time",
+          "locationsText": "US, CA, Santa Clara",
+          "postedOn": "Posted 30+ Days Ago",
+          "startDate": "2026-06-11"
+        },
+        {
+          "title": "Senior Research Scientist, Efficient Deep Learning",
+          "externalPath": "/job/US-CA-Santa-Clara/Senior-Research-Scientist--Efficient-Deep-Learning_JR2009709",
+          "timeType": "Full time",
+          "locationsText": "US, CA, Santa Clara",
+          "postedOn": "Posted 30+ Days Ago",
+          "startDate": "2026-01-09"
+        },
+        {
+          "title": "Applied Research Intern, NLP - Fall 2026",
+          "externalPath": "/job/US-CA-Santa-Clara/Applied-Research-Intern--NLP---Fall-2026_JR2010488",
+          "timeType": "Full time",
+          "locationsText": "US, CA, Santa Clara",
+          "postedOn": "Posted 30+ Days Ago",
+          "startDate": "2026-07-01"
+        }
+      ],
+      "userAuthenticated": false
+    },
+    "/job/US-CA-Santa-Clara/PhD-Software-Engineering-Intern--Decision-Intelligence---Fall-2026_JR2017522": {
+      "jobPostingInfo": {
+        "id": "e6e51cf60ed3100a98db63f78c3c0000",
+        "title": "PhD Software Engineering Intern, Decision Intelligence - Fall 2026",
+        "jobDescription": "<p>NVIDIA has been transforming computer graphics, PC gaming, and accelerated computing for more than 25 years. It’s a unique legacy of innovation that’s fueled by great technology—and amazing people. Today, we’re tapping into the unlimited potential of AI to define the next era of computing. An era in which our GPU acts as the brains of computers, robots, and self-driving cars that can understand the world. Doing what’s never been done before takes vision, innovation, and the world’s best talent. As an NVIDIAN, you’ll be immersed in a diverse, supportive environment where everyone is inspired to do their best work. Come join the team and see how you can make a lasting impact on the world.</p><p></p><p>Are you passionate about decision optimization, genAI, and advanced parallel computing techniques? NVIDIA&#39;s cuOpt team is at the forefront of redefining decision-making systems with a GPU-accelerated open-source platform. If you are looking for a place where you can apply your outstanding skills and make a meaningful impact, this is the opportunity for you! Join us to help build the future of decision intelligence.</p><h2></h2><p><b>What you&#39;ll be doing:</b></p><ul><li><p>Prototype and develop parallel algorithms for decision optimization problems</p></li><li><p>Performance tuning, optimization, and benchmarking of large-scale parallel numerical software</p></li><li><p>Collaborate with team members to understand software use cases and requirements</p></li></ul><p></p><p><b>What we need to see:</b></p><ul><li><p>Pursuing a PhD degree in Computer Science or a related field</p></li><li><p>Excellent parallel C&#43;&#43; programming, with familiarity in CUDA programming</p></li><li><p>Deep understanding of algorithms and numerical methods fundamentals in operations research and optimization</p></li><li><p>Mathematical programming (linear, quadratic, mixed-integer) and/or fundamentals of heuristics like genetic algorithms and large neighborhood search</p></li><li><p>Ability to work independently and lead your own development effort</p></li></ul><p></p><p><b>Ways to stand out from the crowd:</b></p><ul><li><p>Experience in algorithmic discovery via autoresearch agents and automated code evolution</p></li><li><p>Track record of relevant open-source contributions in optimization, machine learning, or GPU programming</p></li><li><p>Understanding of hardware and system architecture, including CPU/GPU/Memory/Storage, and everything related to performance optimization</p></li><li><p>Proficiency in a scripting language, preferably Python</p></li></ul><p></p><p>Widely considered to be one of the technology world’s most desirable employers, NVIDIA offers highly competitive salaries and a comprehensive benefits package. As you plan your future, see what we can offer to you and your family <u><a href=\"https://nam11.safelinks.protection.outlook.com/?url&#61;http%3A%2F%2Fwww.nvidiabenefits.com%2F&amp;data&#61;05%7C02%7Cajetson%40nvidia.com%7Cd31fe70e2b004631d7",
+        "location": "US, CA, Santa Clara",
+        "postedOn": "Posted 30+ Days Ago",
+        "startDate": "2026-05-22",
+        "timeType": "Full time",
+        "jobReqId": "JR2017522",
+        "jobPostingId": "PhD-Software-Engineering-Intern--Decision-Intelligence---Fall-2026_JR2017522",
+        "jobPostingSiteId": "NVIDIAExternalCareerSite",
+        "country": {
+          "descriptor": "United States of America",
+          "id": "bc33aa3152ec42d4995f4791a106ed09"
+        },
+        "canApply": true,
+        "posted": true,
+        "includeResumeParsing": true,
+        "jobRequisitionLocation": {
+          "descriptor": "US, CA, Santa Clara",
+          "country": {
+            "descriptor": "United States of America",
+            "id": "bc33aa3152ec42d4995f4791a106ed09",
+            "alpha2Code": "US"
+          }
+        },
+        "externalUrl": "https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite/job/US-CA-Santa-Clara/PhD-Software-Engineering-Intern--Decision-Intelligence---Fall-2026_JR2017522",
+        "questionnaireId": "028095df097b1001ac9358c586600000"
+      },
+      "hiringOrganization": {
+        "name": "2100 NVIDIA USA",
+        "url": ""
+      },
+      "similarJobs": [
+        {
+          "title": "NVIDIA 2027 Internships: Software Engineering",
+          "externalPath": "/job/US-CA-Santa-Clara/NVIDIA-2027-Internships--Software-Engineering_JR2023495",
+          "timeType": "Full time",
+          "locationsText": "US, CA, Santa Clara",
+          "postedOn": "Posted 30+ Days Ago",
+          "startDate": "2026-08-19"
+        },
+        {
+          "title": "NVIDIA 2027 Internships: Systems Software Engineering",
+          "externalPath": "/job/US-CA-Santa-Clara/NVIDIA-2027-Internships--Systems-Software-Engineering_JR2023492",
+          "timeType": "Full time",
+          "locationsText": "US, CA, Santa Clara",
+          "postedOn": "Posted 30+ Days Ago",
+          "startDate": "2026-08-19"
+        },
+        {
+          "title": "Senior Software Engineer, CUDA C++ Core Libraries",
+          "externalPath": "/job/US-CA-Santa-Clara/Senior-Software-Engineer--CUDA-C---Core-Libraries_JR2021114",
+          "timeType": "Full time",
+          "locationsText": "2 Locations",
+          "postedOn": "Posted 27 Days Ago",
+          "startDate": "2026-08-31"
+        }
+      ],
+      "userAuthenticated": false
+    }
+  }
+}

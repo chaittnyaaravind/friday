@@ -1,8 +1,10 @@
 import { HttpError, ok, withUser } from "@/lib/api";
-import { loadActiveJobsForMatching, loadMatchProfile, toMatchJob } from "@/lib/discovery/agent";
+import { loadActiveJobsForMatching, loadMatchProfile, matchColumns, toMatchJob } from "@/lib/discovery/agent";
+import { checkEligibility } from "@/lib/domain/eligibility";
+import { explainMatch } from "@/lib/domain/explain";
 import { authGuidance, computeMatch } from "@/lib/domain/match";
 
-/** POST /api/jobs/:id/match — recompute your transparent match for one opportunity. */
+/** POST /api/jobs/:id/match — recompute your transparent match for one opportunity: score, breakdown, eligibility and the reasons. */
 export const POST = withUser<{ id: string }>(async ({ db, user }, { id }) => {
   const [profile, jobs, { data: p }] = await Promise.all([
     loadMatchProfile(db, user.id),
@@ -12,11 +14,18 @@ export const POST = withUser<{ id: string }>(async ({ db, user }, { id }) => {
   if (!profile) throw new HttpError(400, "Complete your profile first");
   const job = jobs[0];
   if (!job) throw new HttpError(404, "Opportunity not found or no longer active");
-  const m = computeMatch(profile, toMatchJob(job));
+  const matchJob = toMatchJob(job);
+  const m = computeMatch(profile, matchJob);
+  const eligibility = checkEligibility(profile, matchJob, m.distanceMiles);
   const { error } = await db.from("job_matches").upsert(
-    { user_id: user.id, job_id: id, score: m.score, strong: m.strong, missing: m.missing, difficulty: m.difficulty, distance_miles: m.distanceMiles, computed_at: new Date().toISOString() },
+    { user_id: user.id, job_id: id, ...matchColumns(profile, matchJob), computed_at: new Date().toISOString() },
     { onConflict: "user_id,job_id" },
   );
   if (error) throw error;
-  return ok({ ...m, authorization: authGuidance(p?.work_authorization ?? null, { employmentType: job.employment_type, isOnCampus: job.is_on_campus, description: job.description }) });
+  return ok({
+    ...m,
+    eligibility,
+    reasons: explainMatch(m, eligibility),
+    authorization: authGuidance(p?.work_authorization ?? null, { employmentType: job.employment_type, isOnCampus: job.is_on_campus, description: job.description }),
+  });
 });
