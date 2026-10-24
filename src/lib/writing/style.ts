@@ -26,7 +26,21 @@ export const STYLE_GUIDE = `WRITING STYLE (applies to everything you write)
   "perfect fit", "dream job", "wear many hats", "fast-paced environment", "proven track record", "seasoned", "expert",
   "mastery", "world-class", "cutting-edge".
 - Never invent numbers, percentages, dollar amounts, dates, employers, titles, certifications, tools or outcomes. If a stronger
-  sentence needs data you do not have, write the honest version without it.`;
+  sentence needs data you do not have, write the honest version without it.
+HUMAN VOICE (no AI tells; adapted from the "humanizer" and "anti-ai-slop-writing" skills, Wikipedia "Signs of AI writing")
+- State the point directly. No "not X but Y" / "not just X, it's Y" contrasts, no one-line dramatic closers, no "at its core".
+- No AI vocabulary: delve, tapestry, testament, pivotal, crucial, vibrant, intricate, meticulous, seamless, robust (outside
+  engineering), bolster, garner, foster, underscore, showcase, highlight (verb), landscape (figurative), realm, multifaceted,
+  utilize (say "use"), facilitate, commence, endeavor, transformative, groundbreaking, game-changing, synergy.
+- No padding riders: never bolt ", ensuring …", ", highlighting …", ", showcasing …", ", demonstrating …" onto a fact.
+- No stock openers or transitions: Additionally, Moreover, Furthermore, Notably, Indeed, Overall, In today's …
+- No em or en dashes as connectors in sentences; use a comma, colon, or a new sentence. No exclamation marks.
+- Do not force lists of three; use the number of items the facts actually have. Vary sentence length and openings.
+- Plain verbs: use "is", "has", "used", "helped"; avoid "serves as", "boasts", "stands as".
+- Duties are not achievements: replace "Responsible for", "Duties included", "Helped with", "Worked on" with what was
+  actually done, from the facts given.
+- Structure a bullet as action + what/with what + result ONLY when the facts state the result (X-Y-Z). Without a stated
+  result, write action + specifics, and leave it there.`;
 
 const PER_KIND: Record<WritingKind, string> = {
   summary: "SUMMARY: 2 sentences, at most 55 words, specific to this role. No years-of-experience claims. Do not reuse a generic summary.",
@@ -53,6 +67,13 @@ const CLICHES: [RegExp, string][] = [
   [/\b(?:expert|mastery|master of|guru|ninja|rockstar)\b/i, "claimed mastery"],
   [/\bin today's (?:fast|ever)[- ]?\w*\b|\bas an ai\b|\bi hope this (?:letter|message) finds you well\b/i, "AI-style filler"],
 ];
+
+// AI tells (humanizer / anti-ai-slop-writing skills, Wikipedia "Signs of AI writing"). Each is a warning, never an error.
+const AI_WORDS = /\b(?:delv(?:e|es|ed|ing)|tapestry|testament|pivotal|crucial|vibrant|intricate|intricacies|meticulous(?:ly)?|seamless(?:ly)?|bolster(?:ed|ing)?|garner(?:ed|ing)?|foster(?:ed|ing)?|underscor(?:e|es|ed|ing)|showcas(?:e|es|ed|ing)|multifaceted|utiliz(?:e|ed|es|ing)|facilitat(?:e|ed|es|ing)|commenc(?:e|ed|ing)|endeavou?rs?|transformative|groundbreaking|game[- ]chang(?:ing|er)|paramount|realm|landscape of|interplay|navigat(?:e|ed|ing) the)\b/i;
+const NOT_X_BUT_Y = /\bnot (?:just|only|merely|simply)\b[^.]{0,80}\b(?:but|it'?s)\b|\bit'?s not (?:about )?[^.]{1,60}[,;]\s*it'?s\b/i;
+const RIDER = /,\s*(?:ensuring|highlighting|showcasing|underscoring|demonstrating|reflecting|emphasizing|fostering|contributing to)\b/i;
+const STOCK_OPENER = /(?:^|[.!?]\s+|\n)(?:Additionally|Moreover|Furthermore|Notably|Indeed|Importantly|Interestingly|Overall|In conclusion),/;
+const DUTY = /^(?:responsible for|duties (?:included|include)|helped (?:with|to)|worked on|in charge of|tasked with)\b/i;
 const SCOPE = /\b(?:spearhead(?:ed|ing)?|architect(?:ed|ing)|led|managed|oversaw|directed|headed)\b/i;
 const FIRST_PERSON = /\b(?:I|me|my|mine|we|our)\b/;
 const STOP = new Set(["students", "student", "campus", "which", "their", "there", "would", "about", "these", "those", "other", "where", "while", "through"]);
@@ -73,6 +94,19 @@ export function lintWriting(text: string, kind: WritingKind, evidence = ""): Lin
   for (const [re, what] of CLICHES) {
     const m = re.exec(t);
     if (m) out.push({ code: "cliche", severity: "warn", message: `Remove the ${what} (“${m[0]}”) and show the evidence instead.`, excerpt: m[0] });
+  }
+
+  const ai = AI_WORDS.exec(t);
+  if (ai) out.push({ code: "ai_tell", severity: "warn", message: `“${ai[0]}” is a word AI drafts overuse; say the plain thing instead.`, excerpt: ai[0] });
+  const nxy = NOT_X_BUT_Y.exec(t);
+  if (nxy) out.push({ code: "ai_tell", severity: "warn", message: "A “not X but Y” contrast adds weight, not information; state the point directly.", excerpt: nxy[0].slice(0, 80) });
+  const rider = RIDER.exec(t);
+  if (rider) out.push({ code: "ai_tell", severity: "warn", message: `“${rider[0].replace(/^,\s*/, "")} …” is padding bolted onto a fact; cut it or state the real result.`, excerpt: rider[0] });
+  const opener = STOCK_OPENER.exec(t);
+  if (opener) out.push({ code: "ai_tell", severity: "warn", message: `Drop the stock transition “${opener[0].replace(/^[\s.!?]+/, "").replace(/,$/, "")}”.` });
+  if (/\S\s*[—–]\s*\S/.test(t.replace(/\b(?:19|20)\d{2}\s*[–—-]\s*(?:(?:19|20)\d{2}|present)\b/gi, ""))) out.push({ code: "dash", severity: "warn", message: "Replace the dash with a comma, colon or a new sentence; dashes everywhere read as AI-written." });
+  if ((kind === "bullet" || kind === "project") && t.split(/\n+/).some((l) => DUTY.test(l.replace(/^[•\-*]\s*/, "").trim()))) {
+    out.push({ code: "duty", severity: "warn", message: "Starts with a duty (“Responsible for…”, “Helped with…”); start with what you actually did." });
   }
 
   const scope = SCOPE.exec(t);

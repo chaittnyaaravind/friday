@@ -36,3 +36,19 @@ describe("lintWriting — professional, credible, not generic", () => {
     expect(hasBlockingIssue(lintWriting("   ", "answer"))).toBe(true);
   });
 });
+
+describe("AI-tell checks (humanizer / anti-slop)", () => {
+  const codes = (t: string, k: Parameters<typeof lintWriting>[1] = "bullet") => lintWriting(t, k).map((i) => i.code);
+  it("flags AI vocabulary, not-X-but-Y, padding riders, stock openers, dashes and duty phrasing", () => {
+    expect(codes("Utilized Excel to track inventory")).toContain("ai_tell");
+    expect(codes("Not just a front desk role, it's the face of the office", "answer")).toContain("ai_tell");
+    expect(codes("Answered phone calls for the office, ensuring smooth operations")).toContain("ai_tell");
+    expect(codes("I answered phones. Additionally, I filed records.", "answer")).toContain("ai_tell");
+    expect(codes("Answered phones — and filed records")).toContain("dash");
+    expect(codes("Responsible for answering phones")).toContain("duty");
+  });
+  it("leaves plain, specific writing alone (and date ranges are not 'dashes')", () => {
+    expect(codes("Answered student questions at the library front desk and checked out laptops")).toEqual([]);
+    expect(codes("Front desk assistant, 2024 – 2025", "answer")).not.toContain("dash");
+  });
+});

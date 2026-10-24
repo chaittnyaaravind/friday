@@ -8,10 +8,11 @@ import { SessionGuard } from "./session-guard";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { ago } from "@/lib/format";
+import { OFF_CAMPUS_PAGES, SJSU_ONLY } from "@/lib/scope";
 import { ScrollProgress } from "./motion";
 import { cx } from "./ui";
 
-const NAV = [
+const ALL_NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
   { href: "/hunt", label: "Hunt", icon: Radar },
   { href: "/discover", label: "Discover", icon: Compass },
@@ -24,7 +25,8 @@ const NAV = [
   { href: "/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/settings", label: "Settings", icon: Settings },
 ] as const;
-const MOBILE = ["/dashboard", "/discover", "/sjsu", "/applications", "/chat"];
+const NAV = SJSU_ONLY ? ALL_NAV.filter((n) => !OFF_CAMPUS_PAGES.includes(n.href)) : ALL_NAV;
+const MOBILE = SJSU_ONLY ? ["/dashboard", "/sjsu", "/applications", "/resume", "/chat"] : ["/dashboard", "/discover", "/sjsu", "/applications", "/chat"];
 
 type Note = { id: string; kind: string; title: string; body: string | null; job_id: string | null; application_id: string | null; read_at: string | null; created_at: string };
 

@@ -8,7 +8,7 @@ import { bridgeUser } from "@/lib/hunter/link";
 import { enqueue, processQueue } from "@/lib/hunter/pipeline";
 import { createSupabaseAdmin } from "@/lib/supabase/server";
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 const Input = z.object({
   messages: z.array(z.object({

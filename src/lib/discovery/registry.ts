@@ -197,6 +197,14 @@ export const REGISTRY: RegistryCompany[] = [
   // The Research Foundation's "Open Positions" link points to its Workday site. Its postings are read in campus mode
   // (student-level titles only); at capture time every open posting was a staff role, so none is kept.
   { slug: "sjsu-research-foundation", name: "SJSU Research Foundation", domain: "sjsu.edu", hqCity: "San Jose", industry: "SJSU", ats: "workday", careersUrl: "https://sjsurf.wd1.myworkdayjobs.com/SJSURF", config: { tenant: "sjsurf", host: "wd1", site: "SJSURF", campus: "1" }, isSjsu: true },
+  // University Housing Services student roles (verified live 2026-10-24). The page states one application window for the
+  // cycle ("Applications open: November 2, 2026 / close: January 25, 2027"); postings exist only inside it. Three are desk
+  // roles (Community Desk Assistant, Student Administrative Assistant, I-House Office Aide). Apply via the StarRez portal.
+  sjsu("sjsu-housing", "SJSU University Housing Services", "https://www.sjsu.edu/housing/about-us/employment-opportunities.php", "University Housing Services", {
+    mode: "window",
+    applyHost: "starrezhousing.com",
+    roles: "Community Desk Assistant (CDA/ECDA)|Student Administrative Assistant (SAA)|International House Office Aide (IHOA)|Peer Academic Success Coach (PASC)|Resident Advisor (RA)|Theme Community Resident Advisor (TCRA)",
+  }),
   // Pages FRIDAY reads that currently list no individual postings (the Writing Center page describes a standing role and
   // sends applicants to Handshake); kept because they are official and can start listing openings.
   // Verified 2026-10-22: lists Office / Enforcement / On-Call Event student assistants, each a PDF job description with a start pay rate.

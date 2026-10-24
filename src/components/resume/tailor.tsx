@@ -3,7 +3,8 @@
 import { Check, Circle, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import type { AiTailorChange } from "@/lib/ai/tailor-ai";
 import type { TailorProposal } from "@/lib/resume/tailor";
 import type { TermChangeRecord } from "@/lib/resume/terminology";
 import { api } from "../actions";
@@ -24,6 +25,17 @@ export function TailorReview({ proposal: p, terminology = [] }: { proposal: Tail
   const matched = p.skills.filter((s) => s.status === "confirmed");
   const missing = p.skills.filter((s) => s.status === "not_in_profile");
   const relevant: [string, Ranked][] = [["Experience", p.relevant.experience], ["Projects", p.relevant.projects]];
+
+  // The AI rewrites take a few seconds, so they load after the page: the same preview the accept step will reproduce.
+  const [ai, setAi] = useState<{ changes: AiTailorChange[]; note: string | null } | "loading" | "error">("loading");
+  useEffect(() => {
+    let live = true;
+    api<{ ai: AiTailorChange[]; aiNote: string | null }>("/api/resumes/tailor", { method: "POST", json: { jobId: p.job.id } })
+      .then((r) => live && setAi({ changes: r.ai ?? [], note: r.aiNote ?? null }))
+      .catch(() => live && setAi("error"));
+    return () => { live = false; };
+  }, [p.job.id]);
+  const screens = p.screens ?? [];
 
   const toggle = (id: string) => setExclude((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
@@ -60,6 +72,25 @@ export function TailorReview({ proposal: p, terminology = [] }: { proposal: Tail
           {!!missing.length && <p className="text-[12px] leading-relaxed text-dim">These will not be added. If you genuinely have one, add it on the <Link href="/resume/review" className="text-accent hover:underline">Review page</Link> first.</p>}
         </Card>
       </div>
+
+      {!!screens.length && (
+        <Card className="flex flex-col gap-3 p-5">
+          <Label>What this posting screens for</Label>
+          <ul className="flex flex-col gap-2.5">
+            {screens.map((sc, i) => (
+              <li key={`${sc.id}-${i}`} className="flex flex-col gap-0.5 text-[14px]">
+                <span className="flex items-center gap-2">
+                  {sc.covered === "yes" ? <Check size={14} className="text-moss" /> : <Circle size={12} className={sc.covered === "no" ? "text-accent" : "text-dim"} />}
+                  {sc.label}
+                  <span className="text-[12px] text-dim">{sc.covered === "yes" ? `shown: ${sc.evidence ?? "yes"}` : sc.covered === "no" ? "not on your profile" : "check yourself"}</span>
+                </span>
+                <span className="pl-6 text-[12.5px] leading-snug text-muted">{sc.tip}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-[12px] leading-relaxed text-dim">Read from the posting. FRIDAY never adds any of these to your resume; add one to your profile only if it is true.</p>
+        </Card>
+      )}
 
       {(!!p.relevant.experience.length || !!p.relevant.projects.length || !!p.relevant.coursework.length) && (
         <Card className="flex flex-col gap-4 p-5">
@@ -103,6 +134,25 @@ export function TailorReview({ proposal: p, terminology = [] }: { proposal: Tail
             <p className="text-[12px] text-dim">Capitalization and punctuation only — no words added.</p>
           </Group>
         )}
+        <Group tag="AI rewrite · fact-checked" tone="moss">
+          {ai === "loading" ? (
+            <p className="flex items-center gap-2 text-[13.5px] text-muted"><Loader2 size={14} className="animate-spin" /> Writing lines in this posting&rsquo;s terms…</p>
+          ) : ai === "error" ? (
+            <p className="text-[13.5px] text-muted">The AI rewrite is unavailable right now. Accepting still creates the tailored resume with your own wording.</p>
+          ) : ai.changes.length ? (
+            <>
+              {ai.changes.map((c, i) => (
+                <div key={i} className="flex flex-col gap-0.5 text-[13.5px]">
+                  <span className="text-[12px] text-dim">{c.where}</span>
+                  {c.before && <span className="text-dim line-through decoration-[0.5px]">{c.before}</span>}
+                  <span>{c.after}</span>
+                  <span className="text-[12px] text-dim">{c.reason}</span>
+                </div>
+              ))}
+              <p className="text-[12px] leading-relaxed text-dim">Each line was checked against your profile: no new number, tool, title, scope or result, and no AI-sounding phrasing. You can edit any of them after accepting.</p>
+            </>
+          ) : <p className="text-[13.5px] text-muted">{ai.note ?? "No rewrite needed."}</p>}
+        </Group>
         {!!terminology.length && (
           <Group tag="ATS spelling" tone="neutral">
             {terminology.map((t, i) => (

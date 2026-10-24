@@ -1,5 +1,7 @@
 /**
- * Tailoring a resume to a job. Deterministic, no AI.
+ * Tailoring a resume to a job. The deterministic tailor chooses, orders and spells; then, when an AI provider is configured,
+ * the AI pass (lib/ai/tailor-ai.ts) rewrites the few most relevant lines in the posting's terms. A rewrite is kept only if
+ * the fact guard found nothing new in it and it reads clean (no AI tells); every kept line is signed and re-verified here.
  *
  * What this NEVER does — each is tested:
  *   - update or delete anything the student owns: not the uploaded original (`resumes`), not their profile facts
@@ -10,6 +12,8 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { HttpError } from "@/lib/api";
+import { aiTailor, type AiTailorChange } from "@/lib/ai/tailor-ai";
+import type { Screen } from "./campus-screens";
 import { buildResume } from "./generate";
 import { loadProfileItems, loadTailorJob } from "./profile";
 import { buildTailoringReport, type TailoringReport } from "./report";
@@ -18,9 +22,9 @@ import { applyTerminology, type TermChangeRecord } from "./terminology";
 import type { ResumeDoc } from "./types";
 import { validateDoc } from "./validate";
 
-export type TailorInput = { jobId: string; accept?: boolean; exclude?: string[] };
-export type TailorPreview = { proposal: TailorProposal; terminology: TermChangeRecord[] };
-export type TailorCreated = { version: { id: string; label: string }; report: TailoringReport; job: { id: string; title: string; company: string } };
+export type TailorInput = { jobId: string; accept?: boolean; exclude?: string[]; ai?: boolean };
+export type TailorPreview = { proposal: TailorProposal; terminology: TermChangeRecord[]; ai: AiTailorChange[]; aiNote: string | null };
+export type TailorCreated = { version: { id: string; label: string }; report: TailoringReport; job: { id: string; title: string; company: string }; ai: AiTailorChange[]; screens: Screen[] };
 
 /** The student's chosen master resume, if they set one. Read-only. */
 export async function loadMaster(db: SupabaseClient, userId: string): Promise<{ id: string; content: ResumeDoc } | null> {
@@ -35,11 +39,19 @@ export async function tailorResume(db: SupabaseClient, userId: string, input: Ta
   const jobText = [job.title, job.description, job.requirements.join("\n")].filter(Boolean).join("\n");
 
   // Preview: exactly what would change, including the spelling changes — nothing is created.
-  if (!input.accept) return { proposal, terminology: applyTerminology(buildTailored(items, proposal, proposal.options.exclude), jobText).changes };
+  const rewrite = (doc: ResumeDoc) => (input.ai === false ? Promise.resolve({ doc, changes: [] as AiTailorChange[], note: null }) : aiTailor(doc, { userId, keywords: proposal.keywords, items }));
+  if (!input.accept) {
+    const { doc, changes } = applyTerminology(buildTailored(items, proposal, proposal.options.exclude), jobText);
+    const ai = await rewrite(doc);
+    return { proposal, terminology: changes, ai: ai.changes, aiNote: ai.note };
+  }
 
   // Only exclusions of items that exist in the profile are honoured.
   const exclude = (input.exclude ?? []).filter((id) => items.some((i) => i.id === id));
-  const { doc, changes: terminology } = applyTerminology(buildTailored(items, proposal, exclude), jobText);
+  const { doc: spelled, changes: terminology } = applyTerminology(buildTailored(items, proposal, exclude), jobText);
+  let { doc, changes: ai } = await rewrite(spelled);
+  // Belt and braces: if the AI version fails verification for any reason, fall back to the verified deterministic one.
+  if (ai.length && !validateDoc(doc, items).ok) ({ doc, ai } = { doc: spelled, ai: [] });
   const check = validateDoc(doc, items);
   if (!check.ok) throw new HttpError(422, `Tailored resume failed verification: ${check.issues[0].claim}`);
 
@@ -52,6 +64,7 @@ export async function tailorResume(db: SupabaseClient, userId: string, input: Ta
     proposal,
     terminology,
   });
+  if (ai.length) report.aiRewrites = ai;
 
   // A NEW version every time. Nothing existing is touched.
   const { data: version, error } = await db
@@ -69,5 +82,5 @@ export async function tailorResume(db: SupabaseClient, userId: string, input: Ta
     await db.from("resume_versions").delete().eq("id", version.id).eq("user_id", userId);
     throw reportError;
   }
-  return { version: { id: version.id as string, label: version.label as string }, report, job: { id: job.id, title: job.title, company: job.company } };
+  return { version: { id: version.id as string, label: version.label as string }, report, job: { id: job.id, title: job.title, company: job.company }, ai, screens: proposal.screens };
 }

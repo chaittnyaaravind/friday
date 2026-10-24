@@ -29,7 +29,7 @@ import { cached } from "./cache";
 import { AiNotConfiguredError, isAiConfigured, isAiUnavailable } from "./client";
 import { bestMatches, embedForMatching } from "./embeddings";
 import { structured } from "./tasks";
-import { STYLE_GUIDE } from "@/lib/writing/style";
+import { lintWriting, STYLE_GUIDE } from "@/lib/writing/style";
 
 export { clearAiCache as _clearAiCache } from "./cache";
 
@@ -75,6 +75,7 @@ const INSTRUCTION: Record<BulletOp, string> = {
   grammar: "Fix grammar, spelling, tense consistency and punctuation only. Do not change the meaning. Give 1 option.",
   ats: "Rephrase so the <keywords> that the source already supports appear naturally. Never include a keyword the source does not support. Give 2 options.",
   alternatives: "Give three genuinely different rewrites (different structure or emphasis), each keeping every fact identical.",
+  humanize: "Rewrite so it reads like the student wrote it, not an AI: remove AI vocabulary (utilized, leveraged, spearheaded, seamless, robust, showcase, foster, facilitate), \"not X but Y\" contrasts, padding riders (\", ensuring ...\", \", highlighting ...\"), stock transitions and dashes. Use plain verbs and the specific nouns the source already has. Keep every fact identical and add none. Give 2 options.",
   quantify: "The student supplied a verified fact in <student_provided_fact>. Work it into the bullet naturally and use it EXACTLY as given (same number, same meaning). Do not add any other number or claim. Give 2 options.",
 };
 const SHAPE = `JSON shape: {"operation":"rewrite_bullet","original":"...","suggestions":[{"text":"...","reason":"...","sourceEvidence":["exact quote from the input"],"newFactsIntroduced":[],"requiresUserConfirmation":false}],"missingEvidence":[]}`;
@@ -125,7 +126,12 @@ export async function generateResumeEdit(input: BulletEditInput): Promise<Propos
   ].filter(Boolean).join("\n");
   try {
     const raw = await cached({ op, user }, () => structured({ task: "resume_rewrite", schema: EditOut, maxTokens: 900, system: `${RULES}\n\nTASK: ${INSTRUCTION[op]}\n${SHAPE}`, user }));
-    const { suggestions, rejected } = screenSuggestions(raw.suggestions, { original: ctx.text, evidence: input.evidence, userFacts, max: 3 });
+    const screened = screenSuggestions(raw.suggestions, { original: ctx.text, evidence: input.evidence, userFacts, max: 3 });
+    // Among equally safe options, the one that reads human (no AI tells in the writing lint) comes first.
+    const reads = (t: string) => (lintWriting(t, "bullet", basis).some((i) => ["ai_tell", "dash", "duty", "cliche"].includes(i.code)) ? 1 : 0);
+    const risk = { none: 0, low: 1, medium: 2, high: 3 } as const;
+    const suggestions = [...screened.suggestions].sort((a, b) => risk[a.riskLevel] - risk[b.riskLevel] || reads(a.text) - reads(b.text));
+    const { rejected } = screened;
     const missing = safeHints(raw.missingEvidence);
     if ((op === "impactful" || op === "improve" || op === "quantify") && noMetric(ctx.text) && !userFacts && !missing.length) missing.push(MISSING_METRIC);
     return {
@@ -390,6 +396,7 @@ export function classifyBulletOp(message: string): BulletOp {
   if (/\b(?:grammar|typo|spelling|proofread)\b/.test(m)) return "grammar";
   if (/\b(?:alternatives?|options|variations?)\b/.test(m)) return "alternatives";
   if (/\bats\b|\bkeywords?\b/.test(m)) return "ats";
+  if (/\b(?:human|natural|robotic|ai[- ]?(?:sounding|written|generated)|less ai|sounds? like (?:ai|chatgpt))\b/.test(m)) return "humanize";
   return "improve";
 }
 

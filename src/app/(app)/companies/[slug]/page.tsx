@@ -1,6 +1,7 @@
+import { SJSU_ONLY } from "@/lib/scope";
 import { ArrowLeft, ArrowUpRight } from "lucide-react";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { FollowButton } from "@/components/actions";
 import { JobGrid } from "@/components/job-card";
 import { CompanyMark, Label, LinkButton } from "@/components/ui";
@@ -9,6 +10,7 @@ import { ago } from "@/lib/format";
 import { createSupabaseServer, requireUser } from "@/lib/supabase/server";
 
 export default async function CompanyPage({ params }: PageProps<"/companies/[slug]">) {
+  if (SJSU_ONLY) redirect("/sjsu"); // SJSU-only (lib/scope.ts)
   const { slug } = await params;
   const user = await requireUser();
   const db = await createSupabaseServer();

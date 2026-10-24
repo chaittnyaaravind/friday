@@ -1,3 +1,5 @@
+import { SJSU_ONLY } from "@/lib/scope";
+import { redirect } from "next/navigation";
 import { Feed } from "@/components/feed";
 import { HuntNav } from "@/components/hunt-nav";
 import { SourceStatusStrip } from "@/components/source-status";
@@ -19,6 +21,7 @@ const DEFINITION: Record<HuntTab, (w: HuntWindow) => string> = {
 };
 
 export default async function Hunt({ searchParams }: PageProps<"/hunt">) {
+  if (SJSU_ONLY) redirect("/sjsu"); // SJSU-only (lib/scope.ts)
   const sp = await searchParams;
   await requireUser();
   const db = await createSupabaseServer();

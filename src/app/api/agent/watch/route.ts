@@ -37,7 +37,8 @@ export async function GET(req: Request) {
     const { newJobIds, runId, created, failures, companies } = await runDiscovery(db, { trigger: "cron", onlySjsu: true });
     const queued = await enqueue(db, newJobIds);
     // Leave headroom under maxDuration; anything unfinished is picked up by the next tick.
-    const hunter = await processQueue(db, { deadline: started + 240_000 });
+    // One item can take ~70s (AI tailoring + research), so the last one may start no later than ~200s in.
+    const hunter = await processQueue(db, { deadline: started + 200_000 });
     return ok({ runId, companies, created, failures: failures.length, queued, hunter, ms: Date.now() - started });
   } catch (e) {
     return errorResponse(e);

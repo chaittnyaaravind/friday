@@ -1,3 +1,5 @@
+import { SJSU_ONLY } from "@/lib/scope";
+import { redirect } from "next/navigation";
 import { ImportDialog, RunAgentButton } from "@/components/actions";
 import { Feed } from "@/components/feed";
 import { Attribution, ProviderNotice } from "@/components/feed-status";
@@ -10,6 +12,7 @@ import { createSupabaseServer, requireUser } from "@/lib/supabase/server";
 export const metadata = { title: "Discover" };
 
 export default async function Discover({ searchParams }: PageProps<"/discover">) {
+  if (SJSU_ONLY) redirect("/sjsu"); // SJSU-only (lib/scope.ts)
   const sp = await searchParams;
   const user = await requireUser();
   const db = await createSupabaseServer();

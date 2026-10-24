@@ -470,6 +470,64 @@ export function parseRecruitmentPage(html: string, c: CompanyFeed, now: number):
   }));
 }
 
+// ── Application-window pages ──────────────────────────────────────────────────────────────────
+// University Housing Services (/housing/about-us/employment-opportunities.php) names its student roles in plain paragraphs
+// and states the cycle as "Applications open: November 2, 2026 / Applications close: January 25, 2027" (verified live
+// 2026-10-24). The roles are configured (config.roles, "|"-separated) because the page has no per-role headings; a posting
+// is produced for each role ONLY while today is inside the stated window. Before it opens or after it closes: nothing.
+const WINDOW_RE = (word: "open" | "close") =>
+  new RegExp(`applications?\\s+${word}s?\\s*:?\\s*(January|February|March|April|May|June|July|August|September|October|November|December)\\s+(\\d{1,2})(?:st|nd|rd|th)?,?\\s+(\\d{4})`, "i");
+
+export function applicationWindow(text: string): { opens: string; closes: string } | null {
+  const date = (m: RegExpMatchArray | null) => (m ? isoDate(Number(m[3]), MONTHS.indexOf(m[1].toLowerCase()), Number(m[2])) : null);
+  const opens = date(text.match(WINDOW_RE("open")));
+  const closes = date(text.match(WINDOW_RE("close")));
+  return opens && closes && opens <= closes ? { opens, closes } : null;
+}
+
+export function parseWindowPage(html: string, c: CompanyFeed, now: number): RawPosting[] {
+  const main = html.match(/<main[\s\S]*?<\/main>/i)?.[0] ?? html;
+  const text = htmlToText(main).replace(/\s+/g, " ");
+  const win = applicationWindow(text);
+  const today = todayISODate(now);
+  if (!win || today < win.opens || today > win.closes) return [];
+  const roles = (c.config.roles ?? "").split("|").map((r) => r.trim()).filter(Boolean);
+  const closeText = `${MONTHS[Number(win.closes.slice(5, 7)) - 1].replace(/^./, (x) => x.toUpperCase())} ${Number(win.closes.slice(8))}, ${win.closes.slice(0, 4)}`;
+  // The application link: the first link to the configured application host, else the page itself.
+  let applyUrl = c.config.url;
+  for (const m of main.matchAll(/<a\s[^>]*href="([^"]+)"/gi)) {
+    const href = decodeUntilStable(m[1]);
+    if (c.config.applyHost && href.includes(c.config.applyHost)) {
+      try { applyUrl = new URL(href, c.config.url).toString(); } catch { /* keep the page address */ }
+      break;
+    }
+  }
+  const at = roles.map((r) => ({ r, i: text.indexOf(r) }));
+  return at
+    .filter(({ i }) => i !== -1) // a configured role the page no longer names is not an opening
+    .map(({ r, i }) => {
+      const next = at.map((x) => x.i).filter((j) => j > i).sort((a, b) => a - b)[0];
+      const blurb = text.slice(i + r.length, next ?? i + r.length + 700).trim().slice(0, 700);
+      return {
+        source: "sjsu_page" as const,
+        sourceName: c.name,
+        externalId: `${c.slug}:${r}#${win.closes}`, // a new cycle is a new posting
+        title: r,
+        applyUrl,
+        sourceUrl: c.config.url,
+        locationText: "San Jose, CA (SJSU Campus)",
+        department: c.config.department ?? c.name,
+        description: [blurb, `Applications are open until ${closeText}. Apply through the link on the official ${c.name} page.`].filter(Boolean).join("\n\n"),
+        postedAt: null,
+        deadline: win.closes,
+        commitment: null,
+        payText: null,
+        isRemoteHint: false,
+        onCampus: true,
+      };
+    });
+}
+
 const STAFF_HEAD = /\b(?:full[- ]time|staff|faculty|career|management|administrator)\b/i;
 const STUDENT_HEAD = /\b(?:student|assistant|work[- ]study|part[- ]time|peer|tutor|leader|ambassador|lifeguard)/i;
 const JOB_WORD = /\b(?:assistant|clerk|aide|tutor|mentor|leader|ambassador|advisor|technician|worker|attendant|lifeguard|coach|intern|associate|coordinator|representative|specialist|facilitator|monitor|instructor|developer|designer|writer|photographer|analyst|operator|host|barista|cashier|teacher)\b/i;
@@ -480,6 +538,7 @@ async function sjsuPage(c: CompanyFeed): Promise<RawPosting[]> {
   if (!res.ok) throw new SourceError(`${res.status} ${res.statusText}`, c.config.url, res.status);
   const html = await res.text();
   if (c.config.mode === "recruitment") return parseRecruitmentPage(html, c, Date.now());
+  if (c.config.mode === "window") return parseWindowPage(html, c, Date.now());
   const postings = parseListPage(html, c);
   if (c.config.details !== "pdf") return postings;
   // Pages whose openings link to job-description PDFs on sjsu.edu (Parking Services): read each PDF for the duties and the

@@ -12,6 +12,7 @@ export const BULLET_OPS: { kind: EditKind; label: string; /** works without an A
   { kind: "clearer", label: "Make clearer" },
   { kind: "technical", label: "Make technical" },
   { kind: "ats", label: "ATS optimize" },
+  { kind: "humanize", label: "Sound human" },
   { kind: "grammar", label: "Fix grammar", local: true },
   { kind: "alternatives", label: "Generate alternatives" },
   { kind: "quantify", label: "Quantify", local: true },

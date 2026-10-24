@@ -6,7 +6,7 @@ import { REGISTRY } from "@/lib/discovery/registry";
 import { getUser } from "@/lib/supabase/server";
 
 const PIPELINE = ["Discover", "Filter", "Deduplicate", "Verify", "Match", "Analyze", "Tailor", "Prepare", "You review", "You apply", "Track", "Follow up", "Interview", "Offer"];
-const COMPANY_FEEDS = REGISTRY.filter((c) => c.ats !== "watch" && !c.isSjsu).length;
+const SJSU_FEEDS = REGISTRY.filter((c) => c.isSjsu).length;
 
 export default async function Landing() {
   const user = await getUser();
@@ -37,7 +37,7 @@ export default async function Landing() {
             a job board.
           </h1>
           <p className="max-w-[44ch] text-[17px] leading-relaxed text-muted">
-            FRIDAY checks SJSU hiring pages and {COMPANY_FEEDS}+ Silicon Valley career sites every morning, ranks each opening against you, explains exactly why it fits — and helps you apply and follow up.
+            FRIDAY checks {SJSU_FEEDS} official SJSU hiring pages every 5 minutes, ranks each on-campus opening against you, tailors your resume to it and tells you on Telegram. You approve; it applies.
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <LinkButton href={cta.href} variant="primary" size="lg">{cta.label}</LinkButton>

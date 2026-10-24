@@ -44,9 +44,9 @@ const RULES: [CampusRole, RegExp][] = [
   ["dining_retail", /\b(?:kitchen|cooks?|cashiers?|baristas?|servers?|dining|catering|dishwashers?|bookstore|retail|food service|concessions?)\b/i],
   ["it_support", /\b(?:helpdesk|help desk|service desk|tech(?:nical)? support|technology support|computer (?:lab|labs|support)|desktop support|(?:IT|tech) consultants?)\b/i],
   ["it_support", /\bIT\b/],
-  ["library_assistant", /\b(?:library|libraries|circulation|shelvers?|shelving|stacks)\b/i],
+  ["library_assistant", /\b(?:library|libraries|circulation|shelvers?|shelving|stacks|archiv(?:al|es|ist))\b/i],
   ["technical_media", /\b(?:developers?|programmers?|web|software|data(?! entry)|analysts?|photographers?|videographers?|video|designers?|graphic|social media|content creators?)\b/i],
-  ["front_desk_admin", /\b(?:office (?:student )?(?:assistants?|aides?|support|clerks?)|front counter|administrative|admin|front desk|receptionists?|reception|clerks?|clerical|mailroom|records|data entry|document (?:processing|imaging)|scanning|customer service|information desk|welcome desk|check[- ]in|program assistants?|operations assistants?)\b/i],
+  ["front_desk_admin", /\b(?:office (?:student )?(?:assistants?|aides?|support|clerks?)|front counter|administrative|admin|front desk|desk (?:assistants?|attendants?|aides?)|community desk|receptionists?|reception|clerks?|clerical|mailroom|records|data entry|document (?:processing|imaging)|scanning|customer service|information desk|welcome desk|check[- ]in|program assistants?|operations assistants?)\b/i],
   ["student_assistant", /\bstudents?\b|\bassistants?\b|\baides?\b/i],
 ];
 
@@ -58,7 +58,7 @@ export function classifyCampusRoles(title: string | null | undefined): CampusRol
   return roles.length ? roles : ["other"];
 }
 
-export const CAMPUS_EMPLOYERS = ["library", "associated_students", "peer_connections", "student_union", "research_foundation", "writing_center", "orientation", "department", "other"] as const;
+export const CAMPUS_EMPLOYERS = ["library", "associated_students", "peer_connections", "student_union", "research_foundation", "writing_center", "orientation", "housing", "department", "other"] as const;
 export type CampusEmployer = (typeof CAMPUS_EMPLOYERS)[number];
 
 export const CAMPUS_EMPLOYER_LABEL: Record<CampusEmployer, string> = {
@@ -69,6 +69,7 @@ export const CAMPUS_EMPLOYER_LABEL: Record<CampusEmployer, string> = {
   research_foundation: "Research Foundation",
   writing_center: "Writing Center",
   orientation: "Orientation",
+  housing: "University Housing",
   department: "Departments",
   other: "Other campus employers",
 };
@@ -83,6 +84,7 @@ const BY_SLUG: Record<string, CampusEmployer> = {
   "sjsu-research-foundation": "research_foundation",
   "sjsu-writing-center": "writing_center",
   "sjsu-orientation-leaders": "orientation",
+  "sjsu-housing": "housing",
 };
 
 /** The campus employer behind a source, from the source's registry slug. Unknown slugs are never guessed into a named employer. */
@@ -97,6 +99,8 @@ export function campusEmployerOf(slug: string | null | undefined): CampusEmploye
  * Dining employers (Spartan Eats) are deliberately absent: dining work is excluded (see exclusions.ts), not a coverage gap.
  */
 export const CAMPUS_NOT_COVERED: { name: string; reason: string; url: string; checkedOn: string }[] = [
-  { name: "University Housing (Resident Advisors)", reason: "Its employment page could not be reached from FRIDAY when last checked.", url: "https://www.housing.sjsu.edu/aboutus/employment/", checkedOn: "2026-09-27" },
+  { name: "SJSU Handshake", reason: "SJSU's main job board needs a student login, and its terms forbid automated reading. FRIDAY reads your own Handshake alert emails instead (Settings → Auto Hunter).", url: "https://sjsu.joinhandshake.com", checkedOn: "2026-10-24" },
+  { name: "Department student assistant and grader roles", reason: "Departments (e.g. CME, Electrical Engineering, School of Management) hire graders and assistants through instructors or Google Forms each semester, not through postings FRIDAY can read.", url: "https://www.sjsu.edu/cme/resources/job-opportunities/index.php", checkedOn: "2026-10-24" },
+  { name: "University Police Cadets", reason: "A standing program page with no posted openings or dates.", url: "https://www.sjsu.edu/police/about/ops-bureau/cadets.php", checkedOn: "2026-10-24" },
   { name: "Spartan Bookstore", reason: "Hires through a third-party application site FRIDAY does not read.", url: "http://www.bncollegejobs.com/", checkedOn: "2026-09-27" },
 ];

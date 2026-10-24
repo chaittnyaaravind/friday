@@ -38,6 +38,8 @@ export type TailoringReport = {
   terminology: TermChangeRecord[];
   unsupported: Issue[];
   verification: { ok: boolean; linesChecked: number };
+  /** Lines the AI pass rewrote (fact-checked, signed), before and after. Absent when no AI rewrite was kept. */
+  aiRewrites?: { where: string; before: string; after: string; reason: string }[];
   notes: string[];
 };
 

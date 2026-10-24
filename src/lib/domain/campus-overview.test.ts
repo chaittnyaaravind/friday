@@ -28,3 +28,20 @@ describe("campusOverview", () => {
     expect(campusOverview([], [], [], NOW)).toMatchObject({ open: 0, excluded: 0, pay: { stated: 0, unknown: 0, min: null, max: null }, closing: [], changed: [] });
   });
 });
+
+describe("open to apply now", () => {
+  const now = Date.parse("2026-10-24T18:00:00Z");
+  it("counts only listings still open (no deadline, or a deadline today or later), desk jobs among them, and per employer", () => {
+    const o = campusOverview([
+      j("a", { campus_roles: ["front_desk_admin"], physical_demand: "unknown" }),
+      j("b", { campus_roles: ["it_support"], deadline: "2026-10-24" }),
+      j("c", { campus_roles: ["front_desk_admin"], deadline: "2026-10-20" }), // closed: past deadline
+      j("d", { company: "SJSU Student Union", campus_roles: ["fitness_recreation"], physical_demand: "high" }),
+      j("e", { company: "SJSU Student Union", campus_roles: ["front_desk_admin"], physical_demand: "high" }), // high physical is never desk
+      j("f", { excluded_reason: "dining: kitchen" }),
+    ], [], [], now);
+    expect(o.open).toBe(4);
+    expect(o.desk).toBe(2);
+    expect(o.byEmployer).toEqual([{ company: "SJSU Library", open: 2, desk: 2 }, { company: "SJSU Student Union", open: 2, desk: 0 }]);
+  });
+});

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { huntCard, type HuntCard } from "./message";
+import { huntCard, type HuntCard, openJobsNotice } from "./message";
 
 const base: HuntCard = {
   itemId: "11111111-1111-1111-1111-111111111111",
@@ -36,5 +36,41 @@ describe("huntCard", () => {
   });
   it("stays under Telegram's limit", () => {
     expect(huntCard({ ...base, research: { summary: "x".repeat(10_000), required: [] }, email: { ...base.email!, body: "y".repeat(10_000) } }).text.length).toBeLessThanOrEqual(4000);
+  });
+});
+
+describe("openJobsNotice (/open)", () => {
+  it("states the counted totals, per employer, and links each desk job; titles are HTML-escaped", () => {
+    const m = openJobsNotice(
+      { open: 3, desk: 1, byEmployer: [{ company: "SJSU King Library", open: 2, desk: 1 }, { company: "SJSU Student Union", open: 1, desk: 0 }] },
+      [
+        { id: "j1", title: "IT Helpdesk <Student> Assistant", company: "SJSU King Library", deadline: null, desk: true },
+        { id: "j2", title: "Video Production", company: "SJSU King Library", deadline: null, desk: false },
+      ],
+      "https://friday.example",
+    );
+    expect(m.text).toContain("3 SJSU jobs open to apply now</b> · 1 desk");
+    expect(m.text).toContain("King Library 2 (1 desk) · Student Union 1");
+    expect(m.text).toContain('href="https://friday.example/jobs/j1"');
+    expect(m.text).toContain("IT Helpdesk &lt;Student&gt; Assistant");
+    expect(m.text).not.toContain("Video Production"); // only desk jobs are listed
+    expect(m.buttons[0][0].url).toBe("https://friday.example/sjsu");
+  });
+});
+
+describe("huntCard shows the AI rewrites and the posting's screens", () => {
+  it("counts rewrites with one example, and marks each screen", async () => {
+    const base = (await import("./message")).huntCard;
+    const card = base({
+      itemId: "00000000-0000-4000-8000-000000000001",
+      job: { title: "Office Assistant", employer: "SJSU Associated Students", payText: null, physical: "low", physicalWhy: [], deskWhy: ["computer work"], source: "Official page", url: null, deadline: null },
+      score: 80, research: null,
+      resume: { label: "Resume — AS", matched: 2, total: 3, missing: [], changes: [], verified: true, rewrites: [{ where: "Experience · Front Desk", after: "Greeted visitors & answered questions" }] },
+      screens: [{ label: "Customer-facing experience", covered: "yes" }, { label: "Excel", covered: "no" }, { label: "Availability", covered: "check" }],
+      channel: { kind: "site", reason: "Apply on the official page.", needs: [] }, email: null, confirmations: [], blockers: [], appUrl: "https://x/app",
+    });
+    expect(card.text).toContain("1 line rewritten in the posting's terms");
+    expect(card.text).toContain("Greeted visitors &amp; answered questions");
+    expect(card.text).toContain("✅ Customer-facing experience · ❌ Excel · ❔ Availability");
   });
 });

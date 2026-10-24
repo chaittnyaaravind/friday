@@ -11,7 +11,7 @@ const Input = z.object({
 });
 
 /**
- * POST /api/resumes/tailor — deterministic, no AI.
+ * POST /api/resumes/tailor — the deterministic tailor, plus the fact-checked AI rewrite pass when AI is configured.
  *   { jobId }                       → proposal: matched / missing skills, relevant items, proposed changes,
  *                                     and the ATS spelling changes that would be made
  *   { jobId, accept: true, exclude } → creates "Resume — Company" from your confirmed profile, as a NEW version, and stores

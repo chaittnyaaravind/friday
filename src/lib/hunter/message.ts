@@ -17,7 +17,9 @@ export type HuntCard = {
   job: { title: string; employer: string; payText: string | null; physical: PhysicalLevel; physicalWhy: string[]; deskWhy: string[]; source: string; url: string | null; deadline: string | null };
   score: number | null;
   research: { summary: string; required: string[] } | null;
-  resume: { label: string; matched: number; total: number; missing: string[]; changes: string[]; verified: boolean } | null;
+  resume: { label: string; matched: number; total: number; missing: string[]; changes: string[]; verified: boolean; rewrites?: { where: string; after: string }[] } | null;
+  /** What the posting screens for and whether the profile shows it (campus-screens.ts). */
+  screens?: { label: string; covered: "yes" | "no" | "check" }[];
   channel: ApplyChannel;
   email: { to: string; subject: string; body: string } | null;
   confirmations: string[];
@@ -47,8 +49,16 @@ export function huntCard(c: HuntCard): TgMessage {
     L.push("", `<b>Your resume</b> — ${esc(c.resume.label)}${c.resume.verified ? " ✅ every line checked against your profile" : " ⚠️ not verified"}`);
     if (c.resume.total) L.push(`Covers ${c.resume.matched} of ${c.resume.total} things the posting asks for.`);
     if (c.resume.changes.length) L.push(`Tailored: ${esc(clip(c.resume.changes.slice(0, 3).join("; "), 300))}`);
+    if (c.resume.rewrites?.length) {
+      L.push(`✍️ ${c.resume.rewrites.length} line${c.resume.rewrites.length === 1 ? "" : "s"} rewritten in the posting's terms (fact-checked, nothing added), e.g.:`);
+      L.push(`<i>${esc(clip(c.resume.rewrites[0].after, 220))}</i>`);
+    }
     if (c.resume.missing.length) L.push(`Not on your profile (left out, never invented): ${esc(c.resume.missing.slice(0, 5).join(", "))}`);
   } else L.push("", "⚠️ No tailored resume: upload and review your resume in FRIDAY first.");
+  if (c.screens?.length) {
+    const mark = { yes: "✅", no: "❌", check: "❔" } as const;
+    L.push(`Screens for: ${c.screens.slice(0, 8).map((s) => `${mark[s.covered]} ${esc(s.label)}`).join(" · ")}`);
+  }
 
   L.push("");
   if (c.blockers.length) {
@@ -81,3 +91,19 @@ export const handOffNotice = (o: { itemId: string; title: string; url: string; r
   text: `👍 Approved — ${esc(o.title)}\nYour tailored resume is attached.${o.reason ? `\n${esc(o.reason)}` : ""}\nSubmit on the official page, then tap “I applied”.`,
   buttons: [[{ text: "🔗 Open the application", url: o.url }], [{ text: "📨 I applied", data: `dn:${o.itemId}` }]],
 });
+
+export type OpenJob = { id: string; title: string; company: string; deadline: string | null; desk: boolean };
+
+/** Reply to /open: how many SJSU jobs are open to apply right now, per employer, with the desk jobs listed. Counted, never estimated. */
+export function openJobsNotice(o: { open: number; desk: number; byEmployer: { company: string; open: number; desk: number }[] }, jobs: OpenJob[], appUrl: string): TgMessage {
+  const L: string[] = [];
+  L.push(`📋 <b>${o.open} SJSU job${o.open === 1 ? "" : "s"} open to apply now</b> · ${o.desk} desk`);
+  if (o.byEmployer.length) L.push(esc(o.byEmployer.map((e) => `${e.company.replace(/^SJSU /, "")} ${e.open}${e.desk ? ` (${e.desk} desk)` : ""}`).join(" · ")));
+  const desk = jobs.filter((j) => j.desk);
+  if (desk.length) {
+    L.push("", "<b>Desk jobs</b>");
+    for (const j of desk.slice(0, 15)) L.push(`• <a href="${esc(`${appUrl}/jobs/${j.id}`)}">${esc(clip(j.title, 70))}</a> · ${esc(j.company.replace(/^SJSU /, ""))}${j.deadline ? ` · by ${esc(j.deadline.slice(0, 10))}` : ""}`);
+  }
+  L.push("", "Counted from SJSU's official hiring pages FRIDAY reads every 5 minutes. Handshake-only postings arrive through your alert emails.");
+  return { text: clip(L.join("\n"), MAX), buttons: [[{ text: "Open SJSU jobs in FRIDAY", url: `${appUrl}/sjsu` }]] };
+}

@@ -88,12 +88,26 @@ describe("campusEmployerOf — from the source, never guessed", () => {
 describe("employers FRIDAY does not cover are stated, with a reason and a date", () => {
   it("each has a reason, a URL and the date it was checked", () => {
     // Spartan Eats is not listed: dining work is excluded on purpose (exclusions.ts), it is not a gap in coverage.
-    expect(CAMPUS_NOT_COVERED.map((c) => c.name)).toEqual(["University Housing (Resident Advisors)", "Spartan Bookstore"]);
+    expect(CAMPUS_NOT_COVERED.map((c) => c.name)).toEqual(["SJSU Handshake", "Department student assistant and grader roles", "University Police Cadets", "Spartan Bookstore"]);
     for (const c of CAMPUS_NOT_COVERED) {
       expect(c.reason.length).toBeGreaterThan(20);
       expect(c.url).toMatch(/^https?:\/\//);
       expect(c.checkedOn).toMatch(/^\d{4}-\d{2}-\d{2}$/);
       expect(c.reason).not.toMatch(/no jobs|not hiring/i); // a gap in coverage is never presented as an absence of jobs
     }
+  });
+});
+
+describe("desk roles named by University Housing and the Library", () => {
+  it("Community Desk Assistant, Student Administrative Assistant and Office Aide are front-desk/admin roles", () => {
+    for (const t of ["Community Desk Assistant (CDA/ECDA)", "Student Administrative Assistant (SAA)", "International House Office Aide (IHOA)"]) {
+      expect(classifyCampusRoles(t)).toContain("front_desk_admin");
+    }
+  });
+  it("an archival assistant is library work", () => {
+    expect(classifyCampusRoles("LRSP - AAACNA Research & Archival Assistant")).toContain("library_assistant");
+  });
+  it("University Housing is a named employer", () => {
+    expect(campusEmployerOf("sjsu-housing")).toBe("housing");
   });
 });

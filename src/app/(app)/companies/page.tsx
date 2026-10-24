@@ -1,3 +1,5 @@
+import { SJSU_ONLY } from "@/lib/scope";
+import { redirect } from "next/navigation";
 import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { FollowButton, RunAgentButton } from "@/components/actions";
@@ -13,6 +15,7 @@ type Co = { id: string; slug: string; name: string; hq_city: string | null; indu
 const ATS_LABEL: Record<string, string> = { workday: "Workday", greenhouse: "Greenhouse", lever: "Lever", ashby: "Ashby", smartrecruiters: "SmartRecruiters", careers_page: "Careers page" };
 
 export default async function Companies({ searchParams }: PageProps<"/companies">) {
+  if (SJSU_ONLY) redirect("/sjsu"); // SJSU-only (lib/scope.ts)
   const { q } = await searchParams;
   const user = await requireUser();
   const db = await createSupabaseServer();

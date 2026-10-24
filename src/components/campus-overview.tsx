@@ -10,7 +10,7 @@ const money = (n: number) => `$${Number.isInteger(n) ? n : n.toFixed(2)}`;
 export async function CampusOverviewStrip({ db, userId }: { db: SupabaseClient; userId: string }) {
   const { data: rows, error } = await db
     .from("jobs")
-    .select("id, title, excluded_reason, deadline, discovered_at, is_baseline, pay_hourly_min, pay_hourly_max, companies(name)")
+    .select("id, title, excluded_reason, deadline, discovered_at, is_baseline, pay_hourly_min, pay_hourly_max, campus_roles, physical_demand, companies(name)")
     .eq("is_on_campus", true)
     .eq("status", "active")
     .limit(1000);
@@ -35,11 +35,16 @@ export async function CampusOverviewStrip({ db, userId }: { db: SupabaseClient; 
   return (
     <section aria-label="Campus overview" className="flex flex-col gap-3">
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-        {tile("Open campus jobs", o.open, o.excluded ? `${o.excluded} dining / food-service listing${o.excluded === 1 ? "" : "s"} excluded by your rules` : "No listings excluded")}
+        {tile("Open to apply now", o.open, `${o.desk} desk job${o.desk === 1 ? "" : "s"} · ${o.excluded ? `${o.excluded} dining / staff listing${o.excluded === 1 ? "" : "s"} excluded` : "none excluded"}`)}
         {tile("New this week", o.newThisWeek.length, "First seen by FRIDAY in the last 7 days")}
         {tile("Stated pay", o.pay.min != null && o.pay.max != null ? (o.pay.min === o.pay.max ? `${money(o.pay.max)}/hr` : `${money(o.pay.min)}–${money(o.pay.max)}`) : "—", `${o.pay.stated} state an hourly rate · ${o.pay.unknown} do not`)}
         {tile("Your campus applications", o.applications.tracked, o.applications.tracked ? `${o.applications.preparing} preparing · ${o.applications.submittedUnverified + o.applications.submittedConfirmed} submitted (${o.applications.submittedUnverified} unverified) · ${o.applications.interviewing} interviewing` : "Save a job to start tracking it")}
       </div>
+      {o.byEmployer.length > 0 && (
+        <p className="text-[12.5px] text-muted">
+          {o.byEmployer.map((e) => `${e.company.replace(/^SJSU /, "")} ${e.open}${e.desk ? ` (${e.desk} desk)` : ""}`).join(" · ")}
+        </p>
+      )}
       {(o.closing.length > 0 || o.changed.length > 0 || o.newThisWeek.length > 0) && (
         <div className="grid gap-2 md:grid-cols-3">
           {[

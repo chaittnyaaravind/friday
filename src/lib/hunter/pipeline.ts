@@ -177,8 +177,10 @@ async function prepareAndNotify(db: SupabaseClient, it: { id: string; user_id: s
           missing: report.missing,
           changes: report.changedSections.map((c) => `${c.title}: ${c.detail}`),
           verified: report.verification.ok,
+          rewrites: tailored!.ai.map((a) => ({ where: a.where, after: a.after })),
         }
       : null,
+    screens: tailored?.screens.map((s) => ({ label: s.label, covered: s.covered })),
     channel,
     email,
     confirmations: state.confirmations,

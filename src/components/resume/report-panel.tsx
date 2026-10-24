@@ -93,6 +93,24 @@ export function TailoringReportPanel({ report, createdAt, verifiedNow }: {
         )}
       </Card>
 
+      {!!report.aiRewrites?.length && (
+        <Card className="flex flex-col gap-3 p-5">
+          <div className="flex items-baseline justify-between gap-3">
+            <Label>AI rewrites (fact-checked)</Label>
+            <span className="num font-mono text-[12px] text-dim">{report.aiRewrites.length}</span>
+          </div>
+          <ul className="flex flex-col gap-3">
+            {report.aiRewrites.map((c, i) => (
+              <li key={i} className="flex flex-col gap-0.5 text-[13.5px]">
+                <span className="text-[12px] text-dim">{c.where}</span>
+                {c.before && <span className="text-[12.5px] text-dim line-through decoration-[0.5px]">{c.before}</span>}
+                <span>{c.after}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
       <TerminologyChanges changes={report.terminology} />
 
       {!!report.notes.length && (

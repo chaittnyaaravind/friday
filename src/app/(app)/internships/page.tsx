@@ -1,3 +1,5 @@
+import { SJSU_ONLY } from "@/lib/scope";
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ImportDialog } from "@/components/actions";
 import { Feed } from "@/components/feed";
@@ -12,6 +14,7 @@ import { createSupabaseServer, requireUser } from "@/lib/supabase/server";
 export const metadata = { title: "Internships" };
 
 export default async function Internships({ searchParams }: PageProps<"/internships">) {
+  if (SJSU_ONLY) redirect("/sjsu"); // SJSU-only (lib/scope.ts)
   const sp = await searchParams;
   const user = await requireUser();
   const db = await createSupabaseServer();

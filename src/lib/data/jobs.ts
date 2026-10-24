@@ -6,6 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { CAMPUS_EMPLOYERS, CAMPUS_ROLES, type CampusEmployer, type CampusRole } from "@/lib/domain/campus";
 import { firstSeenAfter, isWindow, todayISODate } from "@/lib/domain/hunt";
 import type { Gap, Reason } from "@/lib/domain/match";
+import { SJSU_ONLY } from "@/lib/scope";
 
 export type JobListItem = {
   id: string;
@@ -214,7 +215,8 @@ export async function searchJobs(db: SupabaseClient, f: JobFilters) {
     p_q: f.q || null,
     p_types: f.types?.length ? f.types : null,
     p_categories: f.categories?.length ? f.categories : null,
-    p_on_campus: f.onCampus ?? null,
+    // SJSU-only (lib/scope.ts): every search is limited to on-campus jobs, whatever the caller asked for.
+    p_on_campus: SJSU_ONLY ? true : f.onCampus ?? null,
     p_max_miles: f.maxMiles ?? null,
     p_include_remote: f.includeRemote ?? true,
     p_remote_only: f.remoteOnly ?? false,

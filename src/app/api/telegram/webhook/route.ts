@@ -1,18 +1,19 @@
 import { approve, loadItem, markApplied, skip } from "@/lib/hunter/actions";
 import { backfill, redeemLinkCode } from "@/lib/hunter/link";
+import { openJobsMessage } from "@/lib/hunter/open-jobs";
 import { processQueue } from "@/lib/hunter/pipeline";
 import { sameSecret } from "@/lib/hunter/tokens";
 import { answerCallback, sendMessage } from "@/lib/telegram/bot";
 import { createSupabaseAdmin } from "@/lib/supabase/server";
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 type Update = {
   message?: { chat: { id: number; type: string }; text?: string };
   callback_query?: { id: string; from: { id: number }; data?: string; message?: { chat: { id: number } } };
 };
 
-const HELP = "FRIDAY sends you new SJSU desk jobs here, ready to approve. To link this chat, open FRIDAY → Settings → Telegram and tap “Connect”.";
+const HELP = "FRIDAY sends you new SJSU desk jobs here, ready to approve. Send /open to see every SJSU job open to apply right now. To link this chat, open FRIDAY → Settings → Auto Hunter and tap “Connect Telegram”.";
 
 /**
  * POST /api/telegram/webhook — updates from the FRIDAY bot. Only Telegram knows TELEGRAM_WEBHOOK_SECRET (set with
@@ -26,6 +27,12 @@ export async function POST(req: Request) {
 
     if (update.message?.text && update.message.chat.type === "private") {
       const chatId = update.message.chat.id;
+      // /open: what is open to apply right now. Only for a linked chat (the bot serves FRIDAY students, not strangers).
+      if (/^\/(?:open|jobs|count)(?:@\w+)?\s*$/i.test(update.message.text.trim())) {
+        const { data: linked } = await db.from("hunter_links").select("user_id").eq("telegram_chat_id", chatId).maybeSingle();
+        await sendMessage(chatId, linked ? await openJobsMessage(db, (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/+$/, "")) : { text: HELP, buttons: [] });
+        return Response.json({ ok: true });
+      }
       const code = /^\/start\s+([A-Za-z0-9]{8})\s*$/.exec(update.message.text.trim())?.[1] ?? (/^[A-Za-z0-9]{8}$/.test(update.message.text.trim()) ? update.message.text.trim() : null);
       if (!code) {
         await sendMessage(chatId, { text: HELP, buttons: [] });

@@ -19,7 +19,7 @@ const Jd = z.string().max(20_000).optional();
 const Keywords = z.array(z.string().max(60)).max(20).optional();
 
 const Body = z.discriminatedUnion("op", [
-  z.object({ op: z.literal("edit"), kind: z.enum(["improve", "shorten", "clearer", "technical", "impactful", "grammar", "ats", "alternatives", "quantify"]), target: Ref, ctx: Ctx, sourceItemId: z.string().max(60).nullable().optional(), keywords: Keywords, userFacts: z.string().trim().max(200).optional() }),
+  z.object({ op: z.literal("edit"), kind: z.enum(["improve", "shorten", "clearer", "technical", "impactful", "grammar", "ats", "alternatives", "quantify", "humanize"]), target: Ref, ctx: Ctx, sourceItemId: z.string().max(60).nullable().optional(), keywords: Keywords, userFacts: z.string().trim().max(200).optional() }),
   z.object({ op: z.literal("summary"), doc: DocSchema, keywords: Keywords }),
   z.object({ op: z.literal("skills"), doc: DocSchema, sectionId: z.string().max(40), keywords: Keywords }),
   z.object({ op: z.literal("analyze"), doc: DocSchema, jd: Jd }),

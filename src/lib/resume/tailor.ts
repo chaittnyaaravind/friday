@@ -4,6 +4,8 @@
  * missing requirements are shown as "not found in profile" and never added.
  */
 import { extractSkills, resolveSkill, skillBySlug } from "@/lib/domain/skills";
+import { campusScreens, coveredKeywords, type Screen } from "./campus-screens";
+import { evidenceLines } from "./edits";
 import { buildResume, normalizeSentence, type BuildOptions } from "./generate";
 import { isEligible, SECTION_LABEL, type CandidateItem, type ExperienceData, type ProjectData, type ResumeDoc, type SkillData, type TextData } from "./types";
 
@@ -21,6 +23,10 @@ export type TailorProposal = {
     needsConfirmation: string[];
   };
   options: { prioritySkills: string[]; rank: [string, number][]; exclude: string[] };
+  /** What the posting screens for (customer service, software, GPA, availability…) and whether the profile shows it. */
+  screens: Screen[];
+  /** Job terms the profile supports: the confirmed matching skills plus covered screens. The only words a rewrite may target. */
+  keywords: string[];
 };
 type Ranked = { id: string; label: string; score: number; matches: string[] };
 
@@ -94,8 +100,14 @@ export function tailorProposal(allItems: CandidateItem[], job: TailorJob): Tailo
     .filter((s) => s.status === "not_in_profile")
     .map((s) => (s.mentionedIn ? `${s.name} is required — it's mentioned in your ${s.mentionedIn}, but isn't a confirmed skill` : `${s.name} appears in the job requirements but is not in your profile`));
 
+  const jobText = [job.title, job.description, ...job.requirements].join("\n");
+  const screens = campusScreens(jobText, items.flatMap((i) => evidenceLines(i.data)).join("\n"));
+  const keywords = [...new Set([...skills.filter((s) => s.status === "confirmed").map((s) => s.name), ...coveredKeywords(screens)])].slice(0, 15);
+
   return {
     job: { id: job.id, title: job.title, company: job.company },
+    screens,
+    keywords,
     skills,
     relevant: { experience: exp.filter((e) => e.score > 0).sort((a, b) => b.score - a.score), projects: proj.filter((p) => p.score > 0).sort((a, b) => b.score - a.score), coursework },
     changes: { keep, reorder, wording, notIncluded, needsConfirmation },

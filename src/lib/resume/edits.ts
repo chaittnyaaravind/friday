@@ -11,7 +11,7 @@ import { randomId } from "./ids";
 import { skillMentions } from "./parse";
 import type { DocEntry, DocLine, DocSection, ResumeDoc } from "./types";
 
-export type EditOp = "improve" | "shorten" | "clearer" | "technical" | "impactful" | "grammar" | "ats" | "alternatives" | "quantify" | "summary" | "skills" | "assistant";
+export type EditOp = "improve" | "shorten" | "clearer" | "technical" | "impactful" | "grammar" | "ats" | "alternatives" | "quantify" | "humanize" | "summary" | "skills" | "assistant";
 
 export const OP_LABEL: Record<Exclude<EditOp, "assistant">, string> = {
   improve: "Improve",
@@ -23,6 +23,7 @@ export const OP_LABEL: Record<Exclude<EditOp, "assistant">, string> = {
   ats: "ATS optimize",
   alternatives: "Generate alternatives",
   quantify: "Quantify",
+  humanize: "Make it sound human",
   summary: "Professional summary",
   skills: "Skills optimization",
 };

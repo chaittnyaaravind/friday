@@ -21,6 +21,7 @@ import { syncApplicationsWithListings } from "@/lib/apply/listing-sync";
 import { archiveExpired, closeStale, normalizePosting, upsertJobs, type NormalizedJob } from "./ingest";
 import type { ProviderMetrics } from "./providers";
 import { REGISTRY } from "./registry";
+import { SJSU_ONLY } from "@/lib/scope";
 import { ADAPTERS, usajobsConfigured, type CompanyFeed, type SourceKind } from "./sources";
 
 type CompanyRow = { id: string; slug: string; name: string; ats: string | null; ats_config: Record<string, string>; discoverable: boolean; last_crawled_at: string | null };
@@ -123,7 +124,7 @@ export async function runDiscovery(
     const skills = await skillIdMap(db);
     let q = db.from("companies").select("id, slug, name, ats, ats_config, discoverable, last_crawled_at").eq("discoverable", true);
     if (opts.companySlugs?.length) q = q.in("slug", opts.companySlugs);
-    if (opts.onlySjsu) q = q.eq("is_sjsu", true);
+    if (opts.onlySjsu || SJSU_ONLY) q = q.eq("is_sjsu", true);
     const { data: companies, error } = await q;
     if (error) throw error;
     report.companies = companies?.length ?? 0;

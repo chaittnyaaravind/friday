@@ -10,7 +10,7 @@ import { campusEmployerOf } from "@/lib/domain/campus";
 import { parseHours } from "@/lib/domain/hours";
 import { parsePay } from "@/lib/domain/normalize";
 import { REGISTRY } from "./registry";
-import { ADAPTERS, isCampusTitle, parseRecruitmentPage, SourceError, STUDENT_TITLE, usable, type CompanyFeed } from "./sources";
+import { ADAPTERS, applicationWindow, isCampusTitle, parseRecruitmentPage, parseWindowPage, SourceError, STUDENT_TITLE, usable, type CompanyFeed } from "./sources";
 
 const dir = new URL("../../../test/fixtures/sources/", import.meta.url);
 const json = <T>(file: string): T => JSON.parse(readFileSync(new URL(file, dir), "utf8")) as T;
@@ -570,5 +570,41 @@ describe("every registered adapter", () => {
     await run("greenhouse", feed("greenhouse", "X", { token: "x" }));
     expect(seen[0]["user-agent"]).toMatch(/FRIDAY-JobAgent/);
     expect(Object.keys(seen[0]).map((k) => k.toLowerCase())).not.toContain("authorization");
+  });
+});
+
+// ───────────────────────── SJSU application-window pages ─────────────────────────
+describe("sjsu_page window mode (live University Housing page)", () => {
+  const housingHtml = html("sjsu-housing-employment.html");
+  const url = "https://www.sjsu.edu/housing/about-us/employment-opportunities.php";
+  const roles = "Community Desk Assistant (CDA/ECDA)|Student Administrative Assistant (SAA)|International House Office Aide (IHOA)|Peer Academic Success Coach (PASC)|Resident Advisor (RA)|Theme Community Resident Advisor (TCRA)";
+  const housing = feed("sjsu_page", "SJSU University Housing Services", { url, department: "University Housing Services", mode: "window", applyHost: "starrezhousing.com", roles });
+  const at = (iso: string) => Date.parse(iso);
+
+  it("reads the stated window: open November 2, 2026, close January 25, 2027", () => {
+    expect(applicationWindow("Applications open: November 2, 2026 Applications close: January 25, 2027")).toEqual({ opens: "2026-11-02", closes: "2027-01-25" });
+    expect(applicationWindow("Applications open: November 2, 2026")).toBeNull();
+  });
+  it("before the window opens: nothing, even though the roles are described", () => {
+    expect(parseWindowPage(housingHtml, housing, at("2026-10-24T12:00:00Z"))).toEqual([]);
+  });
+  it("inside the window: one posting per configured role, deadline = close date, apply link = the StarRez portal", () => {
+    const out = parseWindowPage(housingHtml, housing, at("2026-11-03T18:00:00Z"));
+    expect(out.map((p) => p.title)).toEqual(roles.split("|"));
+    for (const p of out) {
+      expect(p.deadline).toBe("2027-01-25");
+      expect(p.onCampus).toBe(true);
+      expect(p.applyUrl).toContain("starrezhousing.com");
+    }
+    const cda = out.find((p) => p.title.startsWith("Community Desk"))!;
+    expect(cda.description).toMatch(/front desk/i);
+    expect(cda.description).not.toMatch(/Student Administrative Assistant/); // the blurb stops at the next role
+  });
+  it("after the window closes: nothing", () => {
+    expect(parseWindowPage(housingHtml, housing, at("2027-01-26T20:00:00Z"))).toEqual([]);
+  });
+  it("a configured role the page no longer names is not emitted", () => {
+    const out = parseWindowPage(housingHtml, feed("sjsu_page", "SJSU University Housing Services", { url, mode: "window", roles: "Community Desk Assistant (CDA/ECDA)|Night Owl Monitor" }), at("2026-11-03T18:00:00Z"));
+    expect(out.map((p) => p.title)).toEqual(["Community Desk Assistant (CDA/ECDA)"]);
   });
 });

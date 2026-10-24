@@ -10,6 +10,8 @@ import { fakeDb, type FakeDb } from "./testing/fake-db";
 
 const h = vi.hoisted(() => ({ adapter: vi.fn() }));
 vi.mock("server-only", () => ({}));
+// These tests exercise the discovery mechanics on an off-campus feed, so they run with the SJSU-only scope switched off.
+vi.mock("@/lib/scope", () => ({ SJSU_ONLY: false, OFF_CAMPUS_PAGES: [] }));
 vi.mock("./sources", async (importOriginal) => ({ ...(await importOriginal<typeof import("./sources")>()), ADAPTERS: { greenhouse: h.adapter } }));
 
 const { archiveExpired, closeStale, normalizePosting, upsertJobs } = await import("./ingest");
