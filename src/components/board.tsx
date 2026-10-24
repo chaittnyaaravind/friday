@@ -4,6 +4,7 @@ import { ArrowUpRight, CalendarPlus, Check, Loader2, Plus, Trash2, X } from "luc
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
+import { attentionReason, matchesFilter, stageOf, TRACKER_FILTER_LABEL, TRACKER_FILTERS, type TrackerFilter } from "@/lib/apply/tracker";
 import { analyze, MIN_SAMPLE } from "@/lib/domain/analytics";
 import { ago, dateTime, shortDate, STATUS_LABEL, STATUS_ORDER, type AppStatus } from "@/lib/format";
 import { api } from "./actions";
@@ -16,6 +17,9 @@ export type App = {
   applied_at: string | null; cover_letter: string | null; contact_name: string | null; contact_email: string | null;
   interview_at: string | null; follow_up_at: string | null; notes: string | null; updated_at: string; resume_version_id: string | null;
   next_action?: string | null;
+  submission_evidence?: string | null;
+  submission_confirmed_at?: string | null;
+  jobs?: { deadline: string | null; status: string | null; pay_hourly_min?: number | null; pay_hourly_max?: number | null; campus_roles?: string[] | null; discovered_at?: string | null; is_on_campus?: boolean | null } | null;
   follow_ups: { id: string; due_at: string; done_at: string | null; note: string | null }[];
   interviews: { id: string; scheduled_at: string; kind: string }[];
 };
@@ -32,12 +36,15 @@ export function Board({ initial, versions }: { initial: App[]; versions: { id: s
   const [openId, setOpenId] = useState<string | null>(sp.get("open"));
   const [mobileCol, setMobileCol] = useState<AppStatus>("preparing");
   const [adding, setAdding] = useState(false);
+  const initialFilter = sp.get("view");
+  const [filter, setFilter] = useState<TrackerFilter>((TRACKER_FILTERS as readonly string[]).includes(initialFilter ?? "") ? (initialFilter as TrackerFilter) : "all");
 
   const by = useMemo(() => {
     const m = Object.fromEntries(STATUS_ORDER.map((s) => [s, [] as App[]])) as Record<AppStatus, App[]>;
-    for (const a of apps) m[a.status]?.push(a);
+    for (const a of apps) if (matchesFilter(a, filter)) m[a.status]?.push(a);
     return m;
-  }, [apps]);
+  }, [apps, filter]);
+  const counts = useMemo(() => Object.fromEntries(TRACKER_FILTERS.map((f) => [f, apps.filter((a) => matchesFilter(a, f)).length])) as Record<TrackerFilter, number>, [apps]);
 
   const move = async (id: string, status: AppStatus) => {
     const prev = apps;
@@ -80,6 +87,13 @@ export function Board({ initial, versions }: { initial: App[]; versions: { id: s
 
   return (
     <>
+      <div role="group" aria-label="Filter applications" className="mb-4 flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none]">
+        {TRACKER_FILTERS.map((f) => (
+          <button key={f} type="button" aria-pressed={filter === f} onClick={() => setFilter(f)} className={cx("h-8 shrink-0 rounded-full px-3 text-[12.5px]", filter === f ? "bg-text text-bg" : "text-muted hairline hover:text-text")}>
+            {TRACKER_FILTER_LABEL[f]} <span className="num font-mono opacity-60">{counts[f]}</span>
+          </button>
+        ))}
+      </div>
       <div className="mb-5 flex items-center justify-between gap-3">
         <div className="flex gap-1 overflow-x-auto [scrollbar-width:none] md:hidden">
           {STATUS_ORDER.map((s) => (
@@ -117,6 +131,8 @@ export function Board({ initial, versions }: { initial: App[]; versions: { id: s
 function AppCard({ a, onOpen, onDrag }: { a: App; onOpen: () => void; onDrag?: () => void }) {
   const next = a.follow_ups.filter((f) => !f.done_at).sort((x, y) => x.due_at.localeCompare(y.due_at))[0];
   const iv = a.interviews.filter((i) => i.scheduled_at > new Date().toISOString()).sort((x, y) => x.scheduled_at.localeCompare(y.scheduled_at))[0];
+  const stage = stageOf(a);
+  const attention = attentionReason(a);
   return (
     <button draggable={Boolean(onDrag)} onDragStart={onDrag} onClick={onOpen} className="card card-hover flex w-full cursor-grab flex-col gap-2.5 p-3.5 text-left active:cursor-grabbing">
       <div className="flex items-center gap-2.5">
@@ -124,6 +140,12 @@ function AppCard({ a, onOpen, onDrag }: { a: App; onOpen: () => void; onDrag?: (
         <span className="truncate text-[12.5px] text-muted">{a.company_name}</span>
       </div>
       <span className="line-clamp-2 text-[14px] leading-snug">{a.job_title}</span>
+      {(stage.label || attention) && (
+        <div className="flex flex-wrap gap-1.5 text-[11px]">
+          {stage.label && <span className={cx("rounded-full px-2 py-0.5 hairline", stage.tone === "moss" && "text-moss", stage.tone === "amber" && "text-amber", stage.tone === "default" && "text-muted")}>{stage.label}</span>}
+          {attention && attention !== "No submission confirmation recorded" && attention !== "Ready, not yet submitted" && <span className="rounded-full px-2 py-0.5 text-accent hairline">{attention}</span>}
+        </div>
+      )}
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] text-dim">
         {a.applied_at && <span>Applied {shortDate(a.applied_at)}</span>}
         {iv && <span className="text-moss">Interview {shortDate(iv.scheduled_at)}</span>}
@@ -178,6 +200,7 @@ function Drawer({ a, versions, onClose, onChange, onDeleted }: { a: App; version
             </a>
           )}
           {a.job_id && <Link href={`/jobs/${a.job_id}`} className="inline-flex h-10 items-center rounded-full px-[18px] text-[14px] text-muted hairline hover:text-text">View opportunity</Link>}
+          {a.job_id && <Link href={`/applications/${a.id}/packet`} className="inline-flex h-10 items-center rounded-full px-[18px] text-[14px] text-muted hairline hover:text-text">Application packet</Link>}
         </div>
 
         <Field label="Status">
@@ -186,6 +209,14 @@ function Drawer({ a, versions, onClose, onChange, onDeleted }: { a: App; version
           </Select>
         </Field>
         {f.status === "ready" && <p className="-mt-3 text-[12.5px] text-muted">When you&apos;ve submitted it on the employer&apos;s site, set the status to <span className="text-text">Applied</span>. FRIDAY never marks it for you.</p>}
+        {["applied", "assessment", "interview", "final_round", "offer"].includes(f.status) && (
+          <Field label="Submission confirmation">
+            <Textarea value={f.submission_evidence ?? ""} onChange={txt("submission_evidence")} onBlur={blur("submission_evidence")} rows={2} maxLength={2000} placeholder="Confirmation number, or the subject and date of the employer's confirmation email" />
+            <span className="text-[12px] text-dim">
+              {a.submission_evidence?.trim() ? `Recorded ${a.submission_confirmed_at ? shortDate(a.submission_confirmed_at) : ""}.` : "FRIDAY cannot see the employer's system, so this stays “Submitted · unverified” until you record the confirmation you received."}
+            </span>
+          </Field>
+        )}
 
         <Field label="Next action"><Input value={f.next_action ?? ""} onChange={txt("next_action")} onBlur={blur("next_action")} maxLength={300} placeholder="e.g. Email the recruiter, finish the assessment" /></Field>
 

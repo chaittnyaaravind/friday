@@ -2,6 +2,7 @@
  * Candidate Profile persistence. The profile (candidate_items) is the single source of
  * truth for resume generation; job matching reads its eligible skills.
  */
+import { excludedMessage } from "@/lib/domain/exclusions";
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { HttpError } from "@/lib/api";
@@ -78,8 +79,10 @@ export async function syncMatchingSkills(db: SupabaseClient, userId: string) {
 
 /** The job fields tailoring needs (title, company, description, parsed requirements). */
 export async function loadTailorJob(db: SupabaseClient, jobId: string) {
-  const { data: job } = await db.from("jobs").select("id, title, description, companies(name), job_requirements(label)").eq("id", jobId).maybeSingle();
+  const { data: job } = await db.from("jobs").select("id, title, description, excluded_reason, companies(name), job_requirements(label)").eq("id", jobId).maybeSingle();
   if (!job) throw new HttpError(404, "Opportunity not found");
+  // Excluded work (exclusions.ts) is refused here, so every tailoring path — page, API, chat — refuses it.
+  if (job.excluded_reason) throw new HttpError(409, excludedMessage(job.excluded_reason as string));
   return {
     id: job.id as string,
     title: job.title as string,

@@ -1,11 +1,14 @@
 import { ArrowUpRight } from "lucide-react";
+import Link from "next/link";
+import { CampusOverviewStrip } from "@/components/campus-overview";
 import { ImportDialog, RunAgentButton } from "@/components/actions";
 import { Feed } from "@/components/feed";
 import { Card, Label, Notice, PageHeader } from "@/components/ui";
 import { SJSU_LINKS } from "@/lib/discovery/registry";
 import { ISSS_NOTICE, ISSS_ON_CAMPUS_URL } from "@/lib/domain/match";
 import { loadSourceHealthForScopes } from "@/lib/data/source-status";
-import { CAMPUS_NOT_COVERED } from "@/lib/domain/campus";
+import { CAMPUS_NOT_COVERED, CAMPUS_ROLE_LABEL, isCampusRole } from "@/lib/domain/campus";
+import { normalizeCampusPrefs } from "@/lib/domain/campus-fit";
 import { minutesAgoLabel, minutesSince } from "@/lib/discovery/health";
 import { createSupabaseServer, requireUser } from "@/lib/supabase/server";
 
@@ -16,17 +19,20 @@ export default async function SjsuJobs({ searchParams }: PageProps<"/sjsu">) {
   const user = await requireUser();
   const db = await createSupabaseServer();
   const [{ data: profile }, { data: pages }] = await Promise.all([
-    db.from("profiles").select("work_authorization").eq("id", user.id).single(),
+    db.from("profiles").select("work_authorization, campus_prefs").eq("id", user.id).single(),
     db.from("companies").select("slug, name, careers_url, last_crawled_at").eq("is_sjsu", true).eq("discoverable", true).order("name"),
   ]);
   const health = await loadSourceHealthForScopes(db, (pages ?? []).map((p) => p.slug as string));
+  const prefs = normalizeCampusPrefs(profile?.campus_prefs);
+  // Desk jobs only by default (Settings → campus preferences); "?desk=0" shows every campus job for this visit.
+  const deskOnly = sp.desk === "0" ? false : sp.desk === "1" ? true : prefs.deskOnly;
 
   return (
     <>
       <PageHeader
         eyebrow="SJSU On-Campus"
         title={<>Work on <span className="serif-em">campus</span>.</>}
-        sub="Student assistant, research, lab, library and peer-educator jobs — read from SJSU's official hiring pages and the Student Union's and Research Foundation's own job boards. Handshake postings can be imported in one step."
+        sub="Front-desk, office, library, IT help desk, lab and research jobs on campus, read from SJSU's official hiring pages and the Student Union's and Research Foundation's own job boards, and ranked by your campus fit. Dining and food-service jobs are excluded. Handshake postings can be imported in one step."
         actions={<><ImportDialog onCampus defaultSource="handshake" trigger="Import from Handshake" /><RunAgentButton scope="sjsu" label="Check SJSU pages" /></>}
       />
 
@@ -37,10 +43,14 @@ export default async function SjsuJobs({ searchParams }: PageProps<"/sjsu">) {
         </Notice>
       )}
 
+      <div className="mb-8">
+        <CampusOverviewStrip db={db} userId={user.id} />
+      </div>
+
       <div className="grid gap-10 lg:grid-cols-[1fr_300px]">
         <Feed
           searchParams={sp}
-          preset={{ onCampus: true, sort: sp.sort ? undefined : "new" }}
+          preset={{ onCampus: true, deskOnly, sort: sp.sort ? undefined : "fit" }}
           lockTypes
           campus
           empty={{
@@ -50,6 +60,17 @@ export default async function SjsuJobs({ searchParams }: PageProps<"/sjsu">) {
           }}
         />
         <aside className="flex flex-col gap-4">
+          <Card className="flex flex-col gap-2 p-5">
+            <Label>Ranked for you by</Label>
+            <ul className="flex flex-col gap-1 text-[13px] text-muted">
+              <li>Roles: {prefs.roles.filter(isCampusRole).map((r) => CAMPUS_ROLE_LABEL[r]).join(", ") || "none chosen"}</li>
+              <li>Minimum pay: {prefs.minHourly != null ? `$${prefs.minHourly}/hr` : "none"}{prefs.maxWeeklyHours != null ? ` · at most ${prefs.maxWeeklyHours} h/week` : ""}</li>
+              <li>{prefs.avoidPhysical ? "Physically demanding work ranked lower" : "Physical demand not penalised"}</li>
+              <li>{deskOnly ? "Showing desk jobs only" : "Showing every campus job (dining always excluded)"}</li>
+            </ul>
+            <Link href={deskOnly ? "/sjsu?desk=0" : "/sjsu?desk=1"} className="text-[13px] text-text underline decoration-hairline-strong underline-offset-4">{deskOnly ? "Show all campus jobs" : "Desk jobs only"}</Link>
+            <Link href="/settings#campus" className="text-[13px] text-text underline decoration-hairline-strong underline-offset-4">Change campus preferences →</Link>
+          </Card>
           <Card className="flex flex-col gap-1 p-2">
             <Label className="px-3 pb-1 pt-2">Where SJSU posts jobs</Label>
             {SJSU_LINKS.map((l) => (

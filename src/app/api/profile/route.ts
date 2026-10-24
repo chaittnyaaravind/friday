@@ -2,6 +2,7 @@ import { z } from "zod";
 import { body, ok, withUser } from "@/lib/api";
 import { rematchAll } from "@/lib/discovery/agent";
 import { BAY_AREA_CITIES, SJSU } from "@/lib/domain/geo";
+import { CampusPrefsSchema, normalizeCampusPrefs } from "@/lib/domain/campus-fit";
 import { PrefsSchema } from "@/lib/domain/notify-prefs";
 import { SKILLS } from "@/lib/domain/skills";
 
@@ -26,6 +27,8 @@ const Patch = z.object({
   portfolio_url: url,
   digest_enabled: z.boolean().optional(),
   notification_prefs: PrefsSchema.optional(),
+  /** Campus-fit preferences (pay floor, hours cap, ranked role types, avoid physical / hard schedules). */
+  campus_prefs: CampusPrefsSchema.optional(),
   /** true = receive email; false = opted out (sets email_unsubscribed_at). */
   email_alerts: z.boolean().optional(),
   skills: z.array(z.string()).max(80).optional(),
@@ -43,6 +46,7 @@ export const GET = withUser(async ({ db, user }) => {
 export const PATCH = withUser(async ({ db, user, req }) => {
   const { skills, origin, onboarded, email_alerts, ...fields } = await body(req, Patch);
   const update: Record<string, unknown> = { ...fields };
+  if (fields.campus_prefs) update.campus_prefs = normalizeCampusPrefs(fields.campus_prefs); // unknown and dining roles dropped
   if (email_alerts !== undefined) update.email_unsubscribed_at = email_alerts ? null : new Date().toISOString();
   if (origin) {
     const city = BAY_AREA_CITIES.find((c) => c.name === origin);

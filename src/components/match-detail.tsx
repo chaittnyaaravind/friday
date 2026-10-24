@@ -1,15 +1,17 @@
 import { AlertTriangle, Check, CircleHelp, X } from "lucide-react";
 import { VERDICT_LABEL, type CheckStatus, type EligibilityResult, type EligibilityVerdict } from "@/lib/domain/eligibility";
 import type { MatchReasons } from "@/lib/domain/explain";
+import type { CampusFit } from "@/lib/domain/campus-fit";
 import type { BreakdownPart } from "@/lib/domain/match";
+import { BURDEN_LABEL, LEVEL_LABEL, type PhysicalFlag, type PhysicalLevel } from "@/lib/domain/physical";
 import { Chip, Label, cx } from "./ui";
 
 /** Where every point of the score came from. The bars are the real fractions; the words say why. The parts sum to the score. */
-export function ScoreBreakdown({ parts, score }: { parts: BreakdownPart[]; score: number }) {
+export function ScoreBreakdown({ parts, score, title = "How the score adds up" }: { parts: (Omit<BreakdownPart, "key"> & { key: string })[]; score: number; title?: string }) {
   return (
     <div className="flex flex-col gap-4 border-t-[0.5px] border-hairline-strong pt-5">
       <div className="flex items-baseline justify-between gap-3">
-        <Label>How the score adds up</Label>
+        <Label>{title}</Label>
         <span className="num font-mono text-[12px] text-dim">{parts.map((p) => p.points).join(" + ")} = {score}</span>
       </div>
       <ul className="flex flex-col gap-3.5">
@@ -93,6 +95,45 @@ export function ReasonsPanel({ reasons }: { reasons: MatchReasons }) {
           </ul>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Campus fit: how this on-campus job lines up with the student's own preferences (role type, stated pay, physical demand,
+ * hours, a verified listing, the deadline). A ranking aid with its arithmetic shown — never a hiring prediction, and
+ * separate from eligibility, which is shown on its own.
+ */
+export function CampusFitPanel({ fit, physical, flags }: { fit: CampusFit; physical: PhysicalLevel; flags: PhysicalFlag[] }) {
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-2">
+          <Label>Campus fit</Label>
+          <p className="text-[22px] leading-tight tracking-[-0.02em]">{fit.score >= 75 ? "Strong fit for what you asked for" : fit.score >= 55 ? "Reasonable fit" : "Weak fit for your preferences"}</p>
+          <p className="max-w-[60ch] text-[12.5px] leading-snug text-dim">An estimate built from your campus preferences and what the listing states. It is not a prediction that you will be hired.</p>
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          <span className={cx("num font-mono text-[40px] font-light leading-none", fit.score >= 75 ? "text-moss" : "text-text")}>{fit.score}</span>
+          <span className="label">of 100</span>
+        </div>
+      </div>
+      {(fit.reasons.length > 0 || fit.cautions.length > 0) && (
+        <div className="grid gap-6 sm:grid-cols-2">
+          <ul className="flex flex-col gap-2">
+            {fit.reasons.map((r) => <li key={r} className="flex items-start gap-2.5 text-[13.5px]"><Check size={14} strokeWidth={2.4} className="mt-[3px] shrink-0 text-moss" />{r}</li>)}
+          </ul>
+          <ul className="flex flex-col gap-2">
+            {fit.cautions.map((c) => <li key={c} className="flex items-start gap-2.5 text-[13.5px]"><AlertTriangle size={14} strokeWidth={2} className="mt-[3px] shrink-0 text-amber" />{c}</li>)}
+          </ul>
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-2 text-[13px]">
+        <Label>Physical demand</Label>
+        <Chip tone={physical === "low" ? "moss" : physical === "unknown" ? "neutral" : "amber"}>{LEVEL_LABEL[physical]}</Chip>
+        {flags.map((f) => <span key={f.kind} className="text-muted">{BURDEN_LABEL[f.kind]}: “{f.text}”</span>)}
+      </div>
+      <ScoreBreakdown parts={fit.parts} score={fit.score} title="How the fit adds up" />
     </div>
   );
 }

@@ -6,8 +6,10 @@ describe("classifyCampusRoles — real titles from SJSU's own pages and feeds", 
   it.each([
     ["Kitchen Assistant", ["dining_retail", "student_assistant"]],
     ["Office Assistant", ["front_desk_admin", "student_assistant"]],
-    ["Counter Clerk", ["dining_retail", "front_desk_admin"]],
-    ["IT Helpdesk Student Assistant", ["technical_media", "student_assistant"]],
+    // The Associated Students "Counter Clerk" is at the Print Shop (live page, 2026-10-22): counter service, not dining.
+    ["Counter Clerk", ["front_desk_admin"]],
+    ["Parking Services Office Student Assistant", ["front_desk_admin", "student_assistant"]],
+    ["IT Helpdesk Student Assistant", ["it_support", "student_assistant"]],
     ["LRSP - Student Engagement Research Assistant", ["research_assistant", "student_assistant"]],
     ["Club Sports Student Supervisor", ["fitness_recreation", "student_assistant"]],
     ["Student Photographer and Videographer", ["technical_media", "student_assistant"]],
@@ -85,7 +87,8 @@ describe("campusEmployerOf — from the source, never guessed", () => {
 
 describe("employers FRIDAY does not cover are stated, with a reason and a date", () => {
   it("each has a reason, a URL and the date it was checked", () => {
-    expect(CAMPUS_NOT_COVERED.map((c) => c.name)).toEqual(["Spartan Eats", "University Housing (Resident Advisors)", "Spartan Bookstore"]);
+    // Spartan Eats is not listed: dining work is excluded on purpose (exclusions.ts), it is not a gap in coverage.
+    expect(CAMPUS_NOT_COVERED.map((c) => c.name)).toEqual(["University Housing (Resident Advisors)", "Spartan Bookstore"]);
     for (const c of CAMPUS_NOT_COVERED) {
       expect(c.reason.length).toBeGreaterThan(20);
       expect(c.url).toMatch(/^https?:\/\//);

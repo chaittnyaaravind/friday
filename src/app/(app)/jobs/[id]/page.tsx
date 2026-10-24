@@ -2,7 +2,7 @@ import { AlertTriangle, ArrowLeft, ArrowUpRight, Check } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AnalyzeJobButton } from "@/components/actions";
-import { EligibilityPanel, ReasonsPanel, ScoreBreakdown } from "@/components/match-detail";
+import { CampusFitPanel, EligibilityPanel, ReasonsPanel, ScoreBreakdown } from "@/components/match-detail";
 import { ApplyPanel } from "@/components/apply-panel";
 import { Reveal, Stagger } from "@/components/motion";
 import { Card, Chip, CompanyMark, Label, Notice, cx } from "@/components/ui";
@@ -10,7 +10,10 @@ import { getJob } from "@/lib/data/jobs";
 import { loadMatchProfile } from "@/lib/discovery/agent";
 import { freshnessOf } from "@/lib/domain/freshness";
 import { matchConcerns, relevantEvidence } from "@/lib/domain/insights";
+import { computeCampusFit } from "@/lib/domain/campus-fit";
 import { checkEligibility } from "@/lib/domain/eligibility";
+import { evaluateExclusion } from "@/lib/domain/exclusions";
+import { isPhysicalLevel, type PhysicalFlag } from "@/lib/domain/physical";
 import { explainMatch } from "@/lib/domain/explain";
 import { authGuidance, computeMatch, learnSuggestion, type Gap, type MatchJob, type Reason } from "@/lib/domain/match";
 import { loadProfileItems } from "@/lib/resume/profile";
@@ -75,6 +78,22 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
   const shown = live ? { score: live.score } : match ? { score: match.score } : null;
   // The eligibility panel already covers these; showing them twice would be noise.
   const coveredByEligibility = /Ph\.D\.|professional experience|citizenship|Targets students graduating|application deadline/i;
+
+  // Exclusion rules (dining and food service) are decided by the backend at ingestion; the stored reason is shown here.
+  // A job read before that column existed is evaluated live with the same rules, so the page never offers to apply to one.
+  const excludedReason: string | null = (job.excluded_reason as string | null) ?? (() => {
+    const r = evaluateExclusion({ title: job.title, description: job.description, department: job.department, category: job.category, employer: company.name });
+    return r.excluded ? `${r.ruleId}: ${r.reason}` : null;
+  })();
+  const physical = isPhysicalLevel(job.physical_demand) ? job.physical_demand : "unknown";
+  const physicalFlags = (Array.isArray(job.physical_flags) ? job.physical_flags : []) as PhysicalFlag[];
+  const fit = job.is_on_campus && !excludedReason && matchProfile
+    ? computeCampusFit({
+        campusRoles: (job.campus_roles as string[] | null) ?? [], payHourlyMin: job.pay_hourly_min ?? null, payHourlyMax: job.pay_hourly_max ?? null,
+        hoursMax: job.hours_max, physical, physicalFlags, deadline: job.deadline, lastVerifiedAt: job.last_verified_at,
+        official: sources.some((s) => s.is_official), status: job.status,
+      }, matchProfile.campusPrefs)
+    : null;
   const shownConcerns = eligibility ? concerns.filter((c) => !coveredByEligibility.test(c.text)) : concerns;
 
   const facts: [string, React.ReactNode][] = [
@@ -82,7 +101,7 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
     ["Location", <>{place(job)}{match?.distance_miles != null && !job.is_on_campus ? <span className="num ml-2 font-mono text-[12px] text-dim">{miles(match.distance_miles)}</span> : null}{job.is_hybrid ? " · Hybrid" : ""}{job.is_remote ? " · Remote OK" : ""}</>],
     ["Type", `${TYPE_LABEL[job.employment_type]}${job.category && job.category !== "Campus" ? ` · ${job.category}` : ""}`],
     ...(job.department ? [["Department", job.department] as [string, React.ReactNode]] : []),
-    ...(job.pay_text ? [["Pay", <span key="p" className="num">{job.pay_text}</span>] as [string, React.ReactNode]] : []),
+    ["Pay", job.pay_text ? <span key="p" className="num">{job.pay_text}</span> : <span key="p" className="text-dim">Not stated on the listing</span>],
     ...(job.hours_text ? [["Hours", job.hours_text] as [string, React.ReactNode]] : []),
     ...(job.is_on_campus ? [["Work-study", job.work_study === "unknown" ? "Not stated — check the posting" : job.work_study === "required" ? "Required" : job.work_study === "eligible" ? "Work-study eligible" : "Not required"] as [string, React.ReactNode]] : []),
     ["Deadline", dl ? <span key="d" className={cx(dl.urgent && "text-accent")}>{longDate(job.deadline)} · {dl.text}</span> : "Not stated"],
@@ -109,11 +128,21 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
           <Chip tone={fresh.state === "new" || fresh.state === "recent" ? "moss" : fresh.state === "active" ? "neutral" : "amber"}>{fresh.label}</Chip>
           <span className="text-[12.5px] text-dim">{fresh.detail}</span>
         </div>
+        {excludedReason && (
+          <Notice tone="accent" title="Excluded by your job-search rules">
+            {excludedReason.replace(/^[a-z_]+:\s*/, "")} FRIDAY does not rank, recommend, tailor a resume or prepare an application for dining and food-service work.
+          </Notice>
+        )}
         {closed && <Notice tone="amber" title={fresh.state === "expired" ? "This listing has expired" : "This listing is no longer on the employer's site"}>FRIDAY last saw it {ago(job.last_verified_at)}. It may have closed — check the official page before applying.</Notice>}
       </header>
 
       <div className="grid gap-8 lg:grid-cols-[1fr_360px] lg:gap-10">
         <div className="flex min-w-0 flex-col gap-8">
+          {fit && (
+            <Card className="reveal reveal-1 p-6">
+              <CampusFitPanel fit={fit} physical={physical} flags={physicalFlags} />
+            </Card>
+          )}
           {/* Why this matches */}
           <Card className="reveal reveal-1 flex flex-col gap-6 p-6">
             <div className="flex items-start justify-between gap-4">
@@ -276,7 +305,11 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
 
         {/* Sticky apply rail */}
         <aside className="flex flex-col gap-4 lg:sticky lg:top-8 lg:self-start">
+          {excludedReason ? (
+            <Card className="p-5 text-[13.5px] leading-snug text-muted">This opportunity is excluded, so FRIDAY offers no save, tailoring or application actions for it. The original listing is still linked below if you want to read it.</Card>
+          ) : (
           <ApplyPanel jobId={job.id} applyUrl={job.apply_url} official={job.apply_url_is_official} saved={saved} applicationId={application?.id ?? null} hasResume={(resumes ?? 0) > 0} latestVersionId={latestResume?.id ?? null} />
+          )}
           {auth.status !== "not_applicable" && (
             <Notice tone={auth.status === "posting_restricts" ? "accent" : auth.status === "potentially_relevant" ? "moss" : "amber"} title={auth.headline}>
               {auth.detail}{" "}

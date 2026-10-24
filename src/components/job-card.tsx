@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { JobListItem } from "@/lib/data/jobs";
 import { CAMPUS_EMPLOYER_LABEL, CAMPUS_ROLE_LABEL, isCampusEmployer, isCampusRole } from "@/lib/domain/campus";
 import { freshnessOf } from "@/lib/domain/freshness";
+import { LEVEL_LABEL } from "@/lib/domain/physical";
 import { ago, deadlineLabel, miles, place, TYPE_LABEL } from "@/lib/format";
 import { SaveButton } from "./actions";
 import { Stagger } from "./motion";
@@ -40,7 +41,7 @@ export function JobCard({ job }: { job: JobListItem }) {
           {job.distance_miles != null && !job.is_on_campus && <span className="num font-mono text-[11.5px] text-dim">{miles(job.distance_miles)}</span>}
           {job.is_hybrid && <span>Hybrid</span>}
           {job.is_remote && job.city && <span>Remote OK</span>}
-          {job.pay_text && <span className="num">{job.pay_text}</span>}
+          {job.pay_text ? <span className="num">{job.pay_text}</span> : job.is_on_campus && <span className="text-dim">Pay not stated</span>}
           {job.hours_text && <span>{job.hours_text}</span>}
         </div>
 
@@ -62,6 +63,10 @@ export function JobCard({ job }: { job: JobListItem }) {
               {/* Eligibility is separate from the score: a strong match can still need a check, or be likely blocked. Nothing is shown for "clear". */}
               {job.eligibility === "verify" && <Chip tone="amber" icon={<AlertTriangle size={11} strokeWidth={2} />}>Verify eligibility</Chip>}
               {job.eligibility === "blocked" && <Chip tone="accent" icon={<AlertTriangle size={11} strokeWidth={2} />}>Likely blocked</Chip>}
+              {/* Physical demand is read from the duties, never the title; "unknown" shows nothing rather than a guess. */}
+              {job.physical_demand === "high" && <Chip tone="amber" icon={<AlertTriangle size={11} strokeWidth={2} />}>{LEVEL_LABEL.high}</Chip>}
+              {job.physical_demand === "moderate" && <Chip tone="amber">{LEVEL_LABEL.moderate}</Chip>}
+              {job.physical_demand === "low" && <Chip tone="moss">{LEVEL_LABEL.low}</Chip>}
               {imported && <Chip tone="accent">Imported by you</Chip>}
               {viaAdzuna && <Chip>via Adzuna</Chip>}
               <span className="label">{TYPE_LABEL[job.employment_type]}</span>
@@ -78,7 +83,15 @@ export function JobCard({ job }: { job: JobListItem }) {
               {job.is_baseline ? "" : ` · first seen ${ago(job.discovered_at)}`} · verified {ago(job.last_verified_at)}
             </span>
           </div>
-          <MatchBadge score={job.score} />
+          {/* On campus the ranking is the student's campus fit (pay, role, physical demand, hours); elsewhere the skills match. */}
+          {job.is_on_campus && job.campus_fit != null ? (
+            <span className="inline-flex items-baseline gap-1.5" title={`Campus fit ${job.campus_fit}/100 — an estimate of fit with your preferences, not a hiring prediction`}>
+              <span className={cx("num font-mono text-[15px] font-medium", job.campus_fit >= 75 ? "text-moss" : job.campus_fit >= 55 ? "text-text" : "text-dim")}>{job.campus_fit}</span>
+              <span className="label">Fit</span>
+            </span>
+          ) : (
+            <MatchBadge score={job.score} />
+          )}
         </div>
       </Card>
     </Link>
@@ -88,7 +101,8 @@ export function JobCard({ job }: { job: JobListItem }) {
 export function JobGrid({ jobs, empty }: { jobs: JobListItem[]; empty?: { title: string; body?: React.ReactNode; action?: React.ReactNode } }) {
   if (!jobs.length) return <EmptyState title={empty?.title ?? "Nothing here yet"} body={empty?.body} action={empty?.action} />;
   return (
-    <Stagger className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+    // grid-cols-1 is minmax(0, 1fr): without it the phone-width column grows to the card's longest unbreakable line (the footer) and the page scrolls sideways.
+    <Stagger className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
       {jobs.map((j) => (
         <JobCard key={j.id} job={j} />
       ))}

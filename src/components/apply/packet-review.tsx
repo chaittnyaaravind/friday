@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import type { ExtraQuestion } from "@/lib/apply/packet";
 import type { PacketState } from "@/lib/apply/packet-service";
+import { classifyQuestion, DECLARATION_LABEL } from "@/lib/apply/questions";
 import { api } from "../actions";
 import { Button, Card, Chip, Input, Label, Notice, Select, Textarea } from "../ui";
 
@@ -167,16 +168,43 @@ export function PacketReview({ applicationId, state, versions, confirmText, aiCo
 
         <Card className="flex flex-col gap-3 p-5">
           <Label>Questions FRIDAY didn&rsquo;t prepare for</Label>
-          <p className="text-[12.5px] leading-snug text-muted">FRIDAY can&rsquo;t read the live application form. If it asks something not covered above, add the question and write your own answer.</p>
-          {extra.map((e, i) => (
+          <p className="text-[12.5px] leading-snug text-muted">FRIDAY can&rsquo;t read the live application form. If it asks something not covered above, add the question. Questions about work authorization, sponsorship, availability, employment history, disability, demographics or similar declarations are always yours to answer; for other questions FRIDAY can draft an answer from your approved profile, which you then edit.</p>
+          {extra.map((e, i) => {
+            const kind = e.question.trim().length >= 3 ? classifyQuestion(e.question) : null;
+            return (
             <div key={i} className="flex flex-col gap-2 border-t-[0.5px] border-hairline-strong pt-3">
               <div className="flex gap-2">
                 <Input value={e.question} onChange={(ev) => setExtra(extra.map((x, j) => (j === i ? { ...x, question: ev.target.value } : x)))} placeholder="The question, as the form words it" aria-label="Question" />
                 <button type="button" aria-label="Remove question" onClick={() => setExtra(extra.filter((_, j) => j !== i))} className="grid size-10 shrink-0 place-items-center rounded-full text-dim hover:bg-surface-2 hover:text-text"><X size={14} /></button>
               </div>
+              {kind?.sensitive && (
+                <p className="text-[12.5px] leading-snug text-amber">Requires your own answer — {DECLARATION_LABEL[kind.kind].toLowerCase()}. {kind.reason}</p>
+              )}
               <Textarea rows={3} value={e.answer ?? ""} onChange={(ev) => setExtra(extra.map((x, j) => (j === i ? { ...x, answer: ev.target.value } : x)))} placeholder="Your answer, in your own words" aria-label="Your answer" />
+              {kind && !kind.sensitive && aiConfigured && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button size="sm" variant="ghost" disabled={busy !== null} onClick={async () => {
+                    setBusy(`draft-${i}`);
+                    setErr(null);
+                    try {
+                      const r = await api<{ answer: string | null; missing: string | null; issues: { message: string }[] }>(`/api/applications/${applicationId}/answers`, { method: "POST", json: { question: e.question } });
+                      if (r.answer) setExtra(extra.map((x, j) => (j === i ? { ...x, answer: r.answer } : x)));
+                      else setErr(r.missing ?? "Your profile does not have the facts to answer this.");
+                      if (r.issues.length) setErr(`Draft notes: ${r.issues.map((x) => x.message).join(" ")}`);
+                    } catch (ex) {
+                      setErr((ex as Error).message);
+                    } finally {
+                      setBusy(null);
+                    }
+                  }}>
+                    {busy === `draft-${i}` ? <Loader2 size={13} className="animate-spin" /> : <Wand2 size={13} />} Draft from my profile
+                  </Button>
+                  <span className="text-[12px] text-dim">A draft built only from facts you approved. Read and edit it; you will confirm it before approving.</span>
+                </div>
+              )}
             </div>
-          ))}
+            );
+          })}
           <div><Button size="sm" onClick={() => setExtra([...extra, { question: "", answer: null }])}><Plus size={13} /> Add a question</Button></div>
         </Card>
 

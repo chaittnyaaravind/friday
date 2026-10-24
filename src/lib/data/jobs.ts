@@ -48,6 +48,13 @@ export type JobListItem = {
   campus_employer: string | null;
   /** The eligibility verdict for the signed-in student, or null before their matches have been recomputed. */
   eligibility: "clear" | "verify" | "blocked" | null;
+  /** Hourly pay ONLY when the posting states an hourly rate; null means unknown, never zero. */
+  pay_hourly_min: number | null;
+  pay_hourly_max: number | null;
+  /** Read from the duties (domain/physical.ts); "unknown" when the posting does not say. */
+  physical_demand: "low" | "moderate" | "high" | "unknown" | null;
+  /** The student's campus fit (domain/campus-fit.ts), for on-campus jobs once their matches are recomputed. */
+  campus_fit: number | null;
 };
 
 export type JobFilters = {
@@ -80,7 +87,12 @@ export type JobFilters = {
   campusEmployers?: CampusEmployer[];
   /** Hide jobs whose eligibility verdict for the signed-in student is "blocked". Jobs with no verdict yet are never hidden. */
   hideBlocked?: boolean;
-  sort?: "match" | "new" | "distance" | "deadline" | "relevance" | "first_seen";
+  /** Only jobs whose STATED hourly pay reaches this. Unknown pay never passes. */
+  minHourly?: number;
+  physical?: (typeof PHYSICAL)[number][];
+  /** Desk-type campus jobs only (domain/campus-fit.ts isDeskJob), enforced by the search RPC. */
+  deskOnly?: boolean;
+  sort?: (typeof SORTS)[number];
   limit?: number;
   offset?: number;
 };
@@ -89,7 +101,8 @@ export type JobFilters = {
 export const EMPLOYMENT_TYPES = ["internship", "on_campus", "part_time", "full_time", "research", "co_op"] as const;
 export const SOURCE_TYPES = ["greenhouse", "lever", "ashby", "smartrecruiters", "workday", "amazon", "microsoft", "sjsu_page", "pinpoint", "handshake_import", "linkedin_import", "indeed_import", "manual", "usajobs", "adzuna"] as const;
 export const LEVELS = ["new_grad", "entry"] as const;
-export const SORTS = ["match", "new", "distance", "deadline", "relevance", "first_seen"] as const;
+export const SORTS = ["match", "new", "distance", "deadline", "relevance", "first_seen", "pay", "fit"] as const;
+export const PHYSICAL = ["low", "moderate", "high", "unknown"] as const;
 export const POSTED_WITHIN = { "24h": 1, "3d": 3, "7d": 7, "30d": 30 } as const;
 
 const list = (v: string | null) => (v ? v.split(",").map((s) => s.trim()).filter(Boolean) : undefined);
@@ -114,11 +127,12 @@ export function invalidFilterParams(sp: URLSearchParams): string[] {
   badList("level", LEVELS);
   badList("campusRole", CAMPUS_ROLES);
   badList("campusEmployer", CAMPUS_EMPLOYERS);
+  badList("physical", PHYSICAL);
   const sort = sp.get("sort");
   if (sort && !(SORTS as readonly string[]).includes(sort)) bad.push("sort");
   const posted = sp.get("postedWithin");
   if (posted && !(posted in POSTED_WITHIN)) bad.push("postedWithin");
-  for (const k of ["miles", "radius", "posted", "deadline", "limit", "offset", "page", "minScore", "closing"]) {
+  for (const k of ["miles", "radius", "posted", "deadline", "limit", "offset", "page", "minScore", "closing", "minPay"]) {
     const v = sp.get(k);
     if (v && (!Number.isFinite(Number(v)) || Number(v) < 0)) bad.push(k);
   }
@@ -184,6 +198,9 @@ export function parseFilters(sp: URLSearchParams | Record<string, string | strin
     campusRoles: only(list(get("campusRole")), CAMPUS_ROLES),
     campusEmployers: only(list(get("campusEmployer")), CAMPUS_EMPLOYERS),
     hideBlocked: bool(get("hideBlocked")),
+    minHourly: (() => { const v = num(get("minPay")); return v !== undefined && v > 0 && v <= 200 ? v : undefined; })(),
+    physical: only(list(get("physical")), PHYSICAL),
+    deskOnly: bool(get("desk")),
     sort: sort && (SORTS as readonly string[]).includes(sort) ? sort : undefined,
     limit,
     offset: clamp(num(get("offset")), 0, 1_000_000) ?? (page && limit ? (page - 1) * limit : page ? (page - 1) * 30 : undefined),
@@ -221,6 +238,9 @@ export async function searchJobs(db: SupabaseClient, f: JobFilters) {
     p_campus_roles: f.campusRoles?.length ? f.campusRoles : null,
     p_campus_employers: f.campusEmployers?.length ? f.campusEmployers : null,
     p_hide_blocked: f.hideBlocked ?? false,
+    p_min_hourly: f.minHourly ?? null,
+    p_physical: f.physical?.length ? f.physical : null,
+    p_desk_only: f.deskOnly ?? false,
   });
   if (error) throw error;
   const rows = (data ?? []) as JobListItem[];

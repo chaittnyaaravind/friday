@@ -16,11 +16,16 @@ import { docToText } from "@/lib/resume/generate";
 import type { ResumeDoc } from "@/lib/resume/types";
 import type { Issue } from "@/lib/resume/validate";
 import { submissionPolicy } from "./policy";
+import { classifyQuestion, DECLARATION_LABEL } from "./questions";
 
 export type AnswerSource = "profile" | "resume" | "student" | "missing";
 export type PacketAnswer = { key: string; label: string; value: string | null; source: AnswerSource };
-/** A question the application asks that FRIDAY has no prepared answer for. The student reports it and writes the answer. */
-export type ExtraQuestion = { question: string; answer: string | null };
+/**
+ * A question the application asks that FRIDAY has no prepared answer for. The student reports it and writes the answer,
+ * or (for questions that are not personal declarations) asks FRIDAY for a draft from approved facts. `origin` is decided
+ * by the server: an answer that is exactly a saved AI draft is "ai_draft", anything else the student's own.
+ */
+export type ExtraQuestion = { question: string; answer: string | null; origin?: "student" | "ai_draft" };
 export type DocumentNeed = { kind: "cover_letter" | "transcript" | "references" | "writing_sample" | "portfolio"; mention: string; required: boolean; state: "in_packet" | "missing" | "you_provide" };
 
 export type PacketJob = { id: string; title: string; company: string; status: string; deadline: string | null; applyUrl: string | null; source: string | null; official: boolean };
@@ -115,7 +120,7 @@ export function buildPacket(i: PacketInput): Packet {
     resume: i.resume ? { versionId: i.resume.versionId, label: i.resume.label, kind: i.resume.kind, text: docToText(i.resume.doc), verified: i.resume.verified } : null,
     coverLetter: cover,
     answers,
-    extra: i.extra.map((e) => ({ question: e.question.trim(), answer: clean(e.answer) })).filter((e) => e.question),
+    extra: i.extra.map((e) => ({ question: e.question.trim(), answer: clean(e.answer), origin: e.origin ?? "student" })).filter((e) => e.question),
     documents: documentsAsked(i.description, Boolean(cover)),
     eligibility: i.eligibility ? { verdict: i.eligibility.verdict, headline: i.eligibility.headline } : null,
   };
@@ -156,6 +161,8 @@ export const CONFIRM_TEXT: Record<string, string> = {
   eligibility_blocked: "FRIDAY thinks I am likely not eligible. I have checked, and I still want to apply.",
   authorization_unclear: "My work authorization is not on my profile. I will answer that question myself on the application.",
   ai_cover_letter: "I have read this cover letter, which an AI drafted, and every statement in it is true.",
+  personal_declarations: "I answered the personal-declaration questions (work authorization, availability, and similar) myself, and my answers are accurate.",
+  ai_answers: "I have read every AI-drafted answer, and every statement in them is true.",
 };
 
 /** Every reason this packet cannot yet be approved, needs a tick, or is worth knowing. Deterministic. */
@@ -178,6 +185,13 @@ export function assessPacket(p: Packet, now: number): PacketIssue[] {
   }
   const unanswered = p.extra.filter((e) => !e.answer);
   if (unanswered.length) add("unexpected_question", "block", `You reported ${unanswered.length === 1 ? "a question" : `${unanswered.length} questions`} FRIDAY has no prepared answer for: “${unanswered[0].question}”. Write your own answer, or remove it.`);
+  // Personal declarations (apply/questions.ts) are the student's own words, always. An AI draft there is a blocker, not a tick.
+  const declarations = p.extra.filter((e) => classifyQuestion(e.question).sensitive);
+  const aiDeclaration = declarations.find((e) => e.answer && e.origin === "ai_draft");
+  if (aiDeclaration) {
+    const c = classifyQuestion(aiDeclaration.question);
+    add("ai_declaration", "block", `“${aiDeclaration.question}” asks for a personal declaration${c.sensitive ? ` (${DECLARATION_LABEL[c.kind].toLowerCase()})` : ""}. Write that answer yourself; FRIDAY will not answer it for you.`);
+  }
   for (const d of p.documents) {
     if (d.kind === "cover_letter" && d.required && d.state === "missing") add("cover_letter_missing", "block", "The posting asks for a cover letter. Write one, or have FRIDAY draft one for you to review.");
     if (d.kind !== "cover_letter" && d.required) add(`you_provide_${d.kind}`, "info", `The posting asks for ${d.kind.replace("_", " ")}. FRIDAY cannot prepare this; you will attach it yourself.`);
@@ -187,6 +201,8 @@ export function assessPacket(p: Packet, now: number): PacketIssue[] {
   else if (p.eligibility?.verdict === "verify") add("eligibility_verify", "confirm", p.eligibility.headline);
   if (!p.answers.find((a) => a.key === "work_authorization")?.value) add("authorization_unclear", "confirm", "Your work authorization is not on your profile, and applications often ask.");
   if (p.coverLetter?.origin === "ai_draft") add("ai_cover_letter", "confirm", "The cover letter was drafted by AI from your profile. FRIDAY does not verify it line by line.");
+  if (declarations.some((e) => e.answer)) add("personal_declarations", "confirm", `${declarations.length === 1 ? "One answer is" : `${declarations.length} answers are`} a personal declaration (${[...new Set(declarations.map((e) => { const c = classifyQuestion(e.question); return c.sensitive ? DECLARATION_LABEL[c.kind].toLowerCase() : ""; }))].join(", ")}). Only you can vouch for ${declarations.length === 1 ? "it" : "them"}.`);
+  if (p.extra.some((e) => e.answer && e.origin === "ai_draft" && !classifyQuestion(e.question).sensitive)) add("ai_answers", "confirm", "Some answers were drafted by AI from your approved profile facts. Read each one before you approve.");
 
   add("source_policy", "info", submissionPolicy(p.job.source).reason);
   return out;

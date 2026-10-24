@@ -211,3 +211,48 @@ describe("what the packet flow never does", () => {
     expect(w.db.tables.applications[0].applied_at).toBeUndefined();
   });
 });
+
+describe("personal declarations and AI-drafted answers (campus hunter)", () => {
+  const DRAFT = "I helped students find sources at the SJSU Library desk.";
+  const drafted = { application_documents: [{ application_id: "app-1", user_id: "u1", kind: "other", title: "Answer draft — Why the library?", content: DRAFT }] };
+
+  it("an answer the student wrote to a declaration question needs their explicit tick before approval", async () => {
+    const w = world();
+    const s = await w.build({ extra: [{ question: "Are you legally authorized to work in the U.S.?", answer: "Yes, on-campus under F-1." }] });
+    expect(s.confirmations).toContain("personal_declarations");
+    expect(s.readiness).toBe("needs_confirmation");
+    await expect(w.approve({ packetId: s.packetId, contentHash: s.contentHash })).rejects.toMatchObject({ status: 409 });
+    expect((await w.approve({ packetId: s.packetId, contentHash: s.contentHash, acknowledged: ["personal_declarations"] })).approval.state).toBe("approved");
+  });
+
+  it("an AI draft pasted into a declaration question BLOCKS approval — the server decides the origin, not the browser", async () => {
+    const w = world({ extra: drafted });
+    const s = await w.build({ extra: [{ question: "What is your weekly availability?", answer: DRAFT }] });
+    expect(s.packet.extra[0].origin).toBe("ai_draft");
+    expect(s.issues.find((i) => i.code === "ai_declaration")).toMatchObject({ severity: "block" });
+    expect(s.readiness).toBe("blocked");
+    await expect(w.approve({ packetId: s.packetId, contentHash: s.contentHash, acknowledged: s.confirmations })).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("an AI draft for an ordinary question needs a tick; once the student edits it, it is their own words", async () => {
+    const w = world({ extra: drafted });
+    const s = await w.build({ extra: [{ question: "Why do you want to work at the library?", answer: DRAFT }] });
+    expect(s.confirmations).toContain("ai_answers");
+    const edited = await w.build({ extra: [{ question: "Why do you want to work at the library?", answer: `${DRAFT} I enjoy it.` }] });
+    expect(edited.packet.extra[0].origin).toBe("student");
+    expect(edited.confirmations).not.toContain("ai_answers");
+  });
+
+  it("an unanswered question still blocks: FRIDAY never fills it in", async () => {
+    const w = world();
+    const s = await w.build({ extra: [{ question: "Do you require sponsorship?", answer: null }] });
+    expect(s.readiness).toBe("blocked");
+    expect(s.packet.extra[0].answer).toBeNull();
+  });
+
+  it("an excluded (dining) job gets no packet at all", async () => {
+    const w = world({ job: { title: "Dining Commons Cook", excluded_reason: "dining: The title names dining and food service work (“cook”)." } });
+    await expect(w.build()).rejects.toMatchObject({ status: 409, message: expect.stringMatching(/excluded by FRIDAY's job-search rules/) });
+    expect(w.db.tables.application_packets).toHaveLength(0);
+  });
+});

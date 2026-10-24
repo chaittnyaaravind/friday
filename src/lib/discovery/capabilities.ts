@@ -121,7 +121,9 @@ export const CAPABILITIES: SourceCapability[] = [
       "Pay, hours and deadlines are not on list-style pages; the description is a fixed sentence pointing to the application link.",
       "Verified 2026-09-27: Associated Students and MLK Library list postings; Writing Center, Student Jobs and Tower Foundation list none (Tower says 'No open positions at this time').",
       "Recruitment mode (Peer Connections, Orientation): a posting is produced only when the page says applications are open AND states an upcoming due date. Verified open on Peer Connections and correctly EMPTY on Orientation, whose banner still says 'now OPEN' after its stated close date.",
-      "Not read: University Housing (unreachable from FRIDAY when checked), Spartan Eats and the Bookstore (separate application systems).",
+      "Parking Services (added 2026-10-22): its openings link to job-description PDFs on www.sjsu.edu, which are read (size- and time-limited) for duties and the stated start pay rate; application is by an emailed form, so the apply link is the page.",
+      "Checked 2026-10-22 and NOT added: jobs.sjsu.edu (/cw/en-us/rss/, allowed by robots.txt) is CSU-wide; its 275 San José postings were all staff, faculty or management, with no student-assistant roles. EOP, Student Leadership Ambassadors and the School of Management had no openings or point to Handshake.",
+      "Not read: University Housing (unreachable from FRIDAY when checked) and the Bookstore (separate application system). Spartan Eats is dining work, which FRIDAY excludes by rule (exclusions.ts).",
     ],
   },
   {

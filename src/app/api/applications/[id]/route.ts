@@ -18,6 +18,8 @@ const Patch = z.object({
   notes: z.string().max(20_000).nullish(),
   next_action: z.string().trim().max(300).nullish().or(z.literal("").transform(() => null)),
   location: z.string().max(200).nullish(),
+  /** What proves the application was received: a confirmation number, the confirmation email's subject, a portal screenshot note. */
+  submission_evidence: z.string().trim().max(2000).nullish().or(z.literal("").transform(() => null)),
 });
 
 /** GET /api/applications/:id — one application with its timeline, follow-ups and interviews. */
@@ -44,6 +46,8 @@ export const PATCH = withUser<{ id: string }>(async ({ db, user, req }, { id }) 
   if (!current) throw new HttpError(404, "Application not found");
 
   const update: Record<string, unknown> = { ...patch };
+  // Evidence is the student's record of the employer's confirmation. Without it, "applied" stays "submission unverified".
+  if (patch.submission_evidence !== undefined) update.submission_confirmed_at = patch.submission_evidence ? new Date().toISOString() : null;
   const moving = patch.status && patch.status !== current.status;
   if (moving && patch.status === "applied" && !current.applied_at && patch.applied_at === undefined) update.applied_at = new Date().toISOString();
 

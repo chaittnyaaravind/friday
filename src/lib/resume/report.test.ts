@@ -111,6 +111,25 @@ describe("buildTailoringReport", () => {
     expect(report.verification.ok).toBe(true);
     expect(report.verification.linesChecked).toBeGreaterThan(5);
   });
+  it("agrees with the tailor preview: every skill the preview lists is in the report, even one named only in the duties", () => {
+    // Found on production: the preview listed Python/SQL (named in prose) and four missing skills; the report showed only the one in a qualifications list.
+    const job: TailorJob = {
+      id: "job-2", title: "Data Intern", company: "Example Co",
+      description: "You will write Python and SQL every day and build dashboards with Rust.\nPreferred qualifications\n• Kubernetes",
+      requirements: ["Kubernetes"],
+    };
+    const p = tailorProposal(ITEMS, job);
+    const { doc, changes } = applyTerminology(buildTailored(ITEMS, p, []), [job.title, job.description].join("\n"));
+    const r = buildTailoringReport({ job, baseline: { doc: baseline(), source: "profile", versionId: null }, tailored: doc, items: ITEMS, proposal: p, terminology: changes });
+    const names = r.requirements.map((x) => x.name.toLowerCase());
+    for (const s of p.skills) expect(names).toContain(s.name.toLowerCase());
+    expect(r.requirements.find((x) => x.name === "Python")).toMatchObject({ kind: "mentioned", status: "matched" });
+    expect(r.requirements.find((x) => x.name === "Rust")).toMatchObject({ kind: "mentioned", status: "missing" });
+    expect(r.missing).toContain("Rust");
+    expect(r.counts.matched + r.counts.weak + r.counts.unclear + r.counts.missing).toBe(r.requirements.length);
+    expect(new Set(names).size).toBe(names.length); // no skill listed twice
+    expect(JSON.stringify(doc)).not.toMatch(/Rust/); // still never added to the resume
+  });
   it("with a master resume as the baseline it says so and does not nag", () => {
     const r = buildTailoringReport({ job: JOB, baseline: { doc: baseline(), source: "master", versionId: "master-1" }, tailored, items: ITEMS, proposal, terminology });
     expect(r.baseline).toEqual({ source: "master", versionId: "master-1" });

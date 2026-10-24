@@ -29,6 +29,7 @@ import { cached } from "./cache";
 import { AiNotConfiguredError, isAiConfigured, isAiUnavailable } from "./client";
 import { bestMatches, embedForMatching } from "./embeddings";
 import { structured } from "./tasks";
+import { STYLE_GUIDE } from "@/lib/writing/style";
 
 export { clearAiCache as _clearAiCache } from "./cache";
 
@@ -45,6 +46,8 @@ HARD RULES
 - No first person. One idea per bullet, under 30 words.
 - In sourceEvidence, quote (exactly, copied from the input) the resume text each change rests on.
 - List anything you are unsure about in newFactsIntroduced (empty when none).
+
+${STYLE_GUIDE}
 Reply with JSON only.`;
 
 const Suggestion = z.object({

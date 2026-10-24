@@ -57,7 +57,7 @@ export function TailoringReportPanel({ report, createdAt, verifiedNow }: {
                   <Icon size={14} className={r.status === "matched" ? "text-moss" : "text-dim"} aria-hidden />
                   <span>{r.name}</span>
                   <Chip tone={s.tone}>{s.word}</Chip>
-                  {r.kind === "preferred" && <span className="text-[12px] text-dim">preferred</span>}
+                  {r.kind !== "required" && <span className="text-[12px] text-dim">{r.kind === "preferred" ? "preferred" : "named in the posting"}</span>}
                 </div>
                 <p className="pl-[22px] text-[12.5px] leading-snug text-muted">{r.message}</p>
                 {r.evidence.map((e, i) => <p key={i} className="pl-[22px] text-[12.5px] text-dim">“{e.text}” — {e.where}</p>)}

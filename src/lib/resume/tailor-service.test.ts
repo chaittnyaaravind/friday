@@ -217,3 +217,12 @@ describe("what it refuses to do, and what it cleans up", () => {
 
 // type-only use so the report shape stays covered by the compiler here
 export type _R = TailoringReport;
+
+describe("excluded jobs (campus hunter)", () => {
+  it("a dining job is refused for tailoring, in preview and on accept, and nothing is written", async () => {
+    const d = seed({ jobs: [job({ title: "Dining Commons Cook", excluded_reason: "dining: The title names dining and food service work (“cook”)." })] as never });
+    await expect(tailorResume(d as never, USER, { jobId: JOB_ID })).rejects.toMatchObject({ status: 409 });
+    await expect(tailorResume(d as never, USER, { jobId: JOB_ID, accept: true })).rejects.toMatchObject({ status: 409, message: expect.stringMatching(/does not tailor resumes/) });
+    expect(writes(d)).toEqual([]);
+  });
+});

@@ -199,6 +199,8 @@ export const REGISTRY: RegistryCompany[] = [
   { slug: "sjsu-research-foundation", name: "SJSU Research Foundation", domain: "sjsu.edu", hqCity: "San Jose", industry: "SJSU", ats: "workday", careersUrl: "https://sjsurf.wd1.myworkdayjobs.com/SJSURF", config: { tenant: "sjsurf", host: "wd1", site: "SJSURF", campus: "1" }, isSjsu: true },
   // Pages FRIDAY reads that currently list no individual postings (the Writing Center page describes a standing role and
   // sends applicants to Handshake); kept because they are official and can start listing openings.
+  // Verified 2026-10-22: lists Office / Enforcement / On-Call Event student assistants, each a PDF job description with a start pay rate.
+  sjsu("sjsu-parking-services", "SJSU Parking Services", "https://www.sjsu.edu/parking/about-us/job-openings.php", "Parking Services", { details: "pdf" }),
   sjsu("sjsu-writing-center", "SJSU Writing Center", "https://www.sjsu.edu/writingcenter/jobs/index.php", "Writing Center"),
   sjsu("sjsu-student-jobs", "SJSU Student Jobs", "https://www.sjsu.edu/careers/jobs/student-jobs.php", "SJSU"),
 ];
@@ -208,6 +210,5 @@ export const SJSU_LINKS = [
   { label: "SJSU Handshake", url: "https://sjsu.joinhandshake.com", note: "SJSU's primary job board — sign in with SJSUOne. Import any listing into FRIDAY by pasting its link." },
   { label: "Career Center: On-campus jobs & Work-Study", url: "https://careercenter.sjsu.edu/on-campus-jobs-federal-work-study/", note: "Official guide to on-campus employment and Federal Work-Study." },
   { label: "Financial Aid: Federal Work-Study", url: "https://www.sjsu.edu/faso/types-of-aid/work-study/index.php", note: "Check whether you have a Work-Study award." },
-  { label: "Spartan Eats — Join our team", url: "https://dineoncampus.com/sjsu/join-our-team", note: "Dining jobs on campus." },
   { label: "ISSS: On-campus employment (F-1)", url: "https://www.sjsu.edu/isss/current-students/employment/campus.php", note: "Rules for international students working on campus." },
 ];

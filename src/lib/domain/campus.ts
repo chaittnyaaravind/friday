@@ -7,7 +7,7 @@
  */
 export const CAMPUS_ROLES = [
   "research_assistant", "lab_assistant", "teaching_assistant", "tutor_mentor", "resident_advisor", "orientation_leader",
-  "fitness_recreation", "dining_retail", "technical_media", "front_desk_admin", "student_assistant", "other",
+  "fitness_recreation", "dining_retail", "it_support", "library_assistant", "technical_media", "front_desk_admin", "student_assistant", "other",
 ] as const;
 export type CampusRole = (typeof CAMPUS_ROLES)[number];
 
@@ -20,6 +20,8 @@ export const CAMPUS_ROLE_LABEL: Record<CampusRole, string> = {
   orientation_leader: "Orientation leader",
   fitness_recreation: "Fitness & recreation",
   dining_retail: "Dining & retail",
+  it_support: "IT help desk & computer lab",
+  library_assistant: "Library & circulation",
   technical_media: "Tech & media",
   front_desk_admin: "Front desk & admin",
   student_assistant: "Student assistant",
@@ -39,10 +41,12 @@ const RULES: [CampusRole, RegExp][] = [
   ["resident_advisor", /\bresident\s+(?:advisors?|advisers?|assistants?)\b/i],
   ["orientation_leader", /\borientation\b.*\b(?:leaders?|team|ambassadors?|assistants?)\b|\bOATies?\b/i],
   ["fitness_recreation", /\b(?:fitness|lifeguards?|intramurals?|club sports?|recreation(?:al)?|aquatics?|referees?|sports?\s+(?:officials?|supervisors?))\b/i],
-  ["dining_retail", /\b(?:kitchen|cooks?|cashiers?|baristas?|counter clerks?|servers?|dining|catering|dishwashers?|bookstore|retail|food service|concessions?)\b/i],
-  ["technical_media", /\b(?:helpdesk|help desk|developers?|programmers?|web|software|data|technicians?|analysts?|photographers?|videographers?|video|designers?|graphic|social media|content creators?)\b/i],
-  ["technical_media", /\bIT\b/],
-  ["front_desk_admin", /\b(?:office assistants?|administrative|front desk|receptionists?|clerks?|mailroom|records|customer service|information desk)\b/i],
+  ["dining_retail", /\b(?:kitchen|cooks?|cashiers?|baristas?|servers?|dining|catering|dishwashers?|bookstore|retail|food service|concessions?)\b/i],
+  ["it_support", /\b(?:helpdesk|help desk|service desk|tech(?:nical)? support|technology support|computer (?:lab|labs|support)|desktop support|(?:IT|tech) consultants?)\b/i],
+  ["it_support", /\bIT\b/],
+  ["library_assistant", /\b(?:library|libraries|circulation|shelvers?|shelving|stacks)\b/i],
+  ["technical_media", /\b(?:developers?|programmers?|web|software|data(?! entry)|analysts?|photographers?|videographers?|video|designers?|graphic|social media|content creators?)\b/i],
+  ["front_desk_admin", /\b(?:office (?:student )?(?:assistants?|aides?|support|clerks?)|front counter|administrative|admin|front desk|receptionists?|reception|clerks?|clerical|mailroom|records|data entry|document (?:processing|imaging)|scanning|customer service|information desk|welcome desk|check[- ]in|program assistants?|operations assistants?)\b/i],
   ["student_assistant", /\bstudents?\b|\bassistants?\b|\baides?\b/i],
 ];
 
@@ -90,9 +94,9 @@ export function campusEmployerOf(slug: string | null | undefined): CampusEmploye
 /**
  * Campus employers FRIDAY does NOT read, and why. Shown on the SJSU page so a gap is stated, not hidden.
  * Each reason is something observed or a plain statement that no reader exists — never a claim that they have no jobs.
+ * Dining employers (Spartan Eats) are deliberately absent: dining work is excluded (see exclusions.ts), not a coverage gap.
  */
 export const CAMPUS_NOT_COVERED: { name: string; reason: string; url: string; checkedOn: string }[] = [
-  { name: "Spartan Eats", reason: "Hires through Dine On Campus, an application system FRIDAY has no reader for.", url: "https://dineoncampus.com/sjsu/join-our-team", checkedOn: "2026-09-27" },
   { name: "University Housing (Resident Advisors)", reason: "Its employment page could not be reached from FRIDAY when last checked.", url: "https://www.housing.sjsu.edu/aboutus/employment/", checkedOn: "2026-09-27" },
   { name: "Spartan Bookstore", reason: "Hires through a third-party application site FRIDAY does not read.", url: "http://www.bncollegejobs.com/", checkedOn: "2026-09-27" },
 ];

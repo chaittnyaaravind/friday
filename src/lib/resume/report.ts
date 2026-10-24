@@ -20,7 +20,8 @@ import { validateDoc, type Issue } from "./validate";
 export type SectionChangeKind = "left out" | "entries removed" | "reordered" | "reworded" | "spelling";
 export type SectionChange = { title: string; changes: SectionChangeKind[]; detail: string };
 
-export type ReportRequirement = { name: string; kind: "required" | "preferred"; status: MatchStatus; message: string; evidence: { text: string; where: string }[] };
+/** required / preferred come from the posting's qualification lists; "mentioned" is a skill the posting names elsewhere (e.g. in the duties). */
+export type ReportRequirement = { name: string; kind: "required" | "preferred" | "mentioned"; status: MatchStatus; message: string; evidence: { text: string; where: string }[] };
 
 export type TailoringReport = {
   version: 1;
@@ -132,8 +133,22 @@ export function buildTailoringReport(i: ReportInput): TailoringReport {
   const jobText = [i.job.title, i.job.description, i.job.requirements.join("\n")].filter(Boolean).join("\n");
   const m = matchJob(i.tailored, jobText);
   const check = validateDoc(i.tailored, i.items);
-  const requirements: ReportRequirement[] = m.skills.map((s) => ({ name: s.name, kind: s.kind, status: s.status, message: s.message, evidence: s.evidence.slice(0, 3).map((e) => ({ text: e.text, where: e.where })) }));
-  const missing = m.skills.filter((s) => s.status === "missing").map((s) => s.name);
+  const toReq = (s: (typeof m.skills)[number], kind: ReportRequirement["kind"]): ReportRequirement => ({ name: s.name, kind, status: s.status, message: s.message, evidence: s.evidence.slice(0, 3).map((e) => ({ text: e.text, where: e.where })) });
+  const requirements: ReportRequirement[] = m.skills.map((s) => toReq(s, s.kind));
+
+  // The tailor screen lists EVERY skill the posting names. The section-aware extraction above only sees qualification lists,
+  // so a skill named in prose ("you will write Python") would be in the preview but not here. Add those — checked against the
+  // resume by the same code — so the two never disagree. They are labelled "mentioned", not "required".
+  const known = new Set(requirements.map((r) => r.name.toLowerCase()));
+  const extra = i.proposal.skills.map((s) => s.name).filter((n) => !known.has(n.toLowerCase()));
+  if (extra.length) {
+    for (const s of matchJob(i.tailored, `Minimum qualifications\n${extra.map((n) => `• ${n}`).join("\n")}`).skills) {
+      if (!known.has(s.name.toLowerCase())) { known.add(s.name.toLowerCase()); requirements.push(toReq(s, "mentioned")); }
+    }
+  }
+  const counts = { matched: 0, weak: 0, unclear: 0, missing: 0 } satisfies Record<MatchStatus, number>;
+  for (const r of requirements) counts[r.status] += 1;
+  const missing = requirements.filter((r) => r.status === "missing").map((r) => r.name);
 
   const notes: string[] = [];
   if (i.baseline.source === "profile") notes.push("You have not set a master resume, so changes are compared with a resume built from your whole confirmed profile. Set one in Resume Lab to compare against it.");
@@ -146,7 +161,7 @@ export function buildTailoringReport(i: ReportInput): TailoringReport {
     job: { id: i.job.id, title: i.job.title, company: i.job.company },
     baseline: { source: i.baseline.source, versionId: i.baseline.versionId },
     requirements,
-    counts: m.counts,
+    counts,
     missing,
     changedSections: compareDocs(i.baseline.doc, i.tailored),
     wording: i.proposal.changes.wording,

@@ -6,7 +6,9 @@
  */
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { computeCampusFit, normalizeCampusPrefs, type CampusPrefs, type FitJob } from "@/lib/domain/campus-fit";
 import { checkEligibility } from "@/lib/domain/eligibility";
+import { isPhysicalLevel, type PhysicalFlag } from "@/lib/domain/physical";
 import { computeMatch, type MatchJob, type MatchProfile } from "@/lib/domain/match";
 import { normalizePrefs } from "@/lib/domain/notify-prefs";
 import { SKILLS } from "@/lib/domain/skills";
@@ -95,6 +97,8 @@ export type DiscoveryReport = {
   /** Per-provider numbers for aggregator sources (Adzuna): requests, fetched, inserted, deduplicated, errors. */
   providers: Record<string, ProviderMetrics>;
   skipped: Record<string, number>;
+  /** Postings kept in the catalog but excluded by rule (e.g. dining), by rule id. Never shown, matched or alerted. */
+  excluded: Record<string, number>;
   newJobIds: string[];
 };
 
@@ -110,7 +114,7 @@ export async function runDiscovery(
     .single();
   if (runErr) throw runErr;
 
-  const report: DiscoveryReport = { runId: run.id, companies: 0, failures: [], seen: 0, kept: 0, created: 0, updated: 0, reopened: 0, baseline: 0, closed: 0, closeBlocked: [], archived: 0, providers: {}, skipped: {}, newJobIds: [] };
+  const report: DiscoveryReport = { runId: run.id, companies: 0, failures: [], seen: 0, kept: 0, created: 0, updated: 0, reopened: 0, baseline: 0, closed: 0, closeBlocked: [], archived: 0, providers: {}, skipped: {}, excluded: {}, newJobIds: [] };
   try {
     const { count: sourcesBefore } = await db.from("companies").select("id", { count: "exact", head: true }).eq("discoverable", true);
     await syncCatalog(db);
@@ -163,7 +167,11 @@ export async function runDiscovery(
         for (const p of postings) {
           const n = normalizePosting(p, c);
           if ("skip" in n) report.skipped[n.skip] = (report.skipped[n.skip] ?? 0) + 1;
-          else kept.push(n);
+          else {
+            kept.push(n);
+            const rule = typeof n.row.excluded_reason === "string" ? n.row.excluded_reason.split(":")[0] : null;
+            if (rule) report.excluded[rule] = (report.excluded[rule] ?? 0) + 1;
+          }
         }
         report.kept += kept.length;
         // First crawl of this employer: everything found is already open, so it is a baseline, not "just opened".
@@ -222,6 +230,8 @@ type JobForMatch = {
   id: string; company_id: string; imported_by: string | null; title: string; employment_type: MatchJob["employmentType"]; category: string | null; is_on_campus: boolean;
   lat: number | null; lng: number | null; city: string | null; is_remote: boolean; is_hybrid: boolean; description: string | null;
   status: string; deadline: string | null; hours_max: number | null; work_study: NonNullable<MatchJob["workStudy"]>;
+  campus_roles?: string[] | null; pay_hourly_min?: number | null; pay_hourly_max?: number | null; physical_demand?: string | null;
+  physical_flags?: PhysicalFlag[] | null; last_verified_at?: string | null; job_sources?: { is_official: boolean }[] | null;
   companies: { name: string } | null;
   job_requirements: { label: string; kind: "required" | "preferred"; skills: { slug: string } | null }[];
 };
@@ -232,8 +242,10 @@ export async function loadActiveJobsForMatching(db: SupabaseClient, onlyIds?: st
   for (let from = 0; ; from += pageSize) {
     let q = db
       .from("jobs")
-      .select("id, company_id, imported_by, title, employment_type, category, is_on_campus, lat, lng, city, is_remote, is_hybrid, description, status, deadline, hours_max, work_study, companies(name), job_requirements(label, kind, skills(slug))")
+      .select("id, company_id, imported_by, title, employment_type, category, is_on_campus, lat, lng, city, is_remote, is_hybrid, description, status, deadline, hours_max, work_study, campus_roles, pay_hourly_min, pay_hourly_max, physical_demand, physical_flags, last_verified_at, companies(name), job_sources(is_official), job_requirements(label, kind, skills(slug))")
       .eq("status", "active")
+      // Excluded jobs (exclusions.ts) are never scored, ranked or alerted on.
+      .is("excluded_reason", null)
       .range(from, from + pageSize - 1);
     if (onlyIds) q = q.in("id", onlyIds);
     const { data, error } = await q;
@@ -256,7 +268,7 @@ export function toMatchJob(j: JobForMatch): MatchJob {
     isRemote: j.is_remote,
     isHybrid: j.is_hybrid,
     description: j.description,
-    requirements: j.job_requirements.map((r) => ({ slug: r.skills?.slug ?? null, label: r.label, kind: r.kind })),
+    requirements: (j.job_requirements ?? []).map((r) => ({ slug: r.skills?.slug ?? null, label: r.label, kind: r.kind })),
     status: j.status,
     deadline: j.deadline,
     hoursMax: j.hours_max,
@@ -264,10 +276,27 @@ export function toMatchJob(j: JobForMatch): MatchJob {
   };
 }
 
-export async function loadMatchProfile(db: SupabaseClient, userId: string): Promise<MatchProfile | null> {
+/** The campus-fit view of a job (on-campus jobs only). */
+export function toFitJob(j: JobForMatch): FitJob | null {
+  if (!j.is_on_campus) return null;
+  return {
+    campusRoles: j.campus_roles ?? [],
+    payHourlyMin: j.pay_hourly_min ?? null,
+    payHourlyMax: j.pay_hourly_max ?? null,
+    hoursMax: j.hours_max,
+    physical: isPhysicalLevel(j.physical_demand) ? j.physical_demand : "unknown",
+    physicalFlags: Array.isArray(j.physical_flags) ? j.physical_flags : [],
+    deadline: j.deadline,
+    lastVerifiedAt: j.last_verified_at ?? null,
+    official: (j.job_sources ?? []).some((s) => s.is_official),
+    status: j.status,
+  };
+}
+
+export async function loadMatchProfile(db: SupabaseClient, userId: string): Promise<(MatchProfile & { campusPrefs: CampusPrefs }) | null> {
   const { data: p } = await db
     .from("profiles")
-    .select("major, origin_lat, origin_lng, radius_miles, workplace, desired_titles, work_authorization, graduation_year, profile_skills(skills(slug))")
+    .select("major, origin_lat, origin_lng, radius_miles, workplace, desired_titles, work_authorization, graduation_year, campus_prefs, profile_skills(skills(slug))")
     .eq("id", userId)
     .single();
   if (!p) return null;
@@ -280,14 +309,19 @@ export async function loadMatchProfile(db: SupabaseClient, userId: string): Prom
     desiredTitles: p.desired_titles ?? [],
     workAuthorization: p.work_authorization ?? null,
     graduationYear: p.graduation_year ?? null,
+    campusPrefs: normalizeCampusPrefs(p.campus_prefs),
   };
 }
 
 /** What is stored with a match besides its score: the breakdown and the eligibility verdict with each check's reason. */
-export function matchColumns(profile: MatchProfile, job: MatchJob) {
+export function matchColumns(profile: MatchProfile & { campusPrefs?: CampusPrefs }, job: MatchJob, fit: FitJob | null = null) {
   const m = computeMatch(profile, job);
   const e = checkEligibility(profile, job, m.distanceMiles);
+  // Campus fit is a separate ranking for on-campus jobs, stored beside (never folded into) the score and the verdict.
+  const f = fit && profile.campusPrefs ? computeCampusFit(fit, profile.campusPrefs) : null;
   return {
+    campus_fit: f?.score ?? null,
+    campus_fit_breakdown: f ? { parts: f.parts, reasons: f.reasons, cautions: f.cautions } : null,
     score: m.score,
     strong: m.strong,
     missing: m.missing,
@@ -312,7 +346,7 @@ export async function rematchAll(db: SupabaseClient, opts: { userId?: string; ne
     if (!profile) continue;
     // A student's imports are private: never score, or reveal the requirements of, someone else's.
     const visible = jobs.filter((j) => !j.imported_by || j.imported_by === u.id);
-    const rows = visible.map((j) => ({ user_id: u.id, job_id: j.id, ...matchColumns(profile, toMatchJob(j)), computed_at: new Date().toISOString() }));
+    const rows = visible.map((j) => ({ user_id: u.id, job_id: j.id, ...matchColumns(profile, toMatchJob(j), toFitJob(j)), computed_at: new Date().toISOString() }));
     for (let i = 0; i < rows.length; i += 500) {
       const { error: mErr } = await db.from("job_matches").upsert(rows.slice(i, i + 500), { onConflict: "user_id,job_id" });
       if (mErr) throw mErr;

@@ -480,8 +480,26 @@ async function sjsuPage(c: CompanyFeed): Promise<RawPosting[]> {
   if (!res.ok) throw new SourceError(`${res.status} ${res.statusText}`, c.config.url, res.status);
   const html = await res.text();
   if (c.config.mode === "recruitment") return parseRecruitmentPage(html, c, Date.now());
-  const main = html.match(/<main[\s\S]*?<\/main>/i)?.[0] ?? html;
+  const postings = parseListPage(html, c);
+  if (c.config.details !== "pdf") return postings;
+  // Pages whose openings link to job-description PDFs on sjsu.edu (Parking Services): read each PDF for the duties and the
+  // stated pay. One PDF failing leaves that posting with the plain description; it never fails the source.
+  const notes = pageNotes(html);
+  for (const p of postings) {
+    const text = await pdfText(p.applyUrl).catch(() => null);
+    if (text) {
+      p.description = [text, notes].filter(Boolean).join("\n\n").slice(0, 20_000);
+      p.payText = payRateText(text);
+    } else if (notes) p.description = `${p.description}\n\n${notes}`;
+    p.applyUrl = c.config.url; // the page says how to apply (an application form by email); the PDF is the description
+    await new Promise((r) => setTimeout(r, 400));
+  }
+  return postings;
+}
 
+/** List-style hiring page → one posting per job link. Pure. Links to application FORMS and "[pdf]" labels are not jobs. */
+export function parseListPage(html: string, c: CompanyFeed): RawPosting[] {
+  const main = html.match(/<main[\s\S]*?<\/main>/i)?.[0] ?? html;
   const out: RawPosting[] = [];
   let heading = "";
   const token = /<h[1-4][^>]*>([\s\S]*?)<\/h[1-4]>|<a\s[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>((?:\s|<br\s*\/?>)*([^<]{0,90}))?/gi;
@@ -493,11 +511,13 @@ async function sjsuPage(c: CompanyFeed): Promise<RawPosting[]> {
     const href = decodeUntilStable(m[2]);
     const title = htmlToText(m[3].replace(/<span[^>]*(?:sr-only|visually-hidden|screen-reader)[^>]*>[\s\S]*?<\/span>/gi, ""))
       .replace(/\s*\(?this link opens in a new (?:window|tab)\)?/gi, "")
+      .replace(/\s*[[(]\s*pdf\s*[\])]/gi, "")
       .replace(/\s+/g, " ")
       .trim();
     const after = htmlToText(m[5] ?? "").trim();
     if (!title || title.length < 4 || title.length > 90) continue;
     if (STAFF_HEAD.test(heading) && !STUDENT_HEAD.test(heading)) continue;
+    if (/\b(?:application|form)\b/i.test(title)) continue; // "SJSU Student Assistant Job Application" is a form, not an opening
     const looksLikeJob = (JOB_HOST.test(href) && JOB_WORD.test(title)) || (JOB_WORD.test(title) && /apply|job|position|opening|hiring|employ/i.test(href + heading));
     if (!looksLikeJob || /^(?:apply|learn more|click here|more info|handshake)$/i.test(title)) continue;
     const url = new URL(href, c.config.url).toString();
@@ -519,6 +539,38 @@ async function sjsuPage(c: CompanyFeed): Promise<RawPosting[]> {
     });
   }
   return out;
+}
+
+/** The page's own words after its list of openings (how to apply, requirements) — they apply to every opening on it. */
+export function pageNotes(html: string): string {
+  const main = html.match(/<main[\s\S]*?<\/main>/i)?.[0] ?? html;
+  const text = htmlToText(main).replace(/[ \t]+/g, " ");
+  const at = text.search(/\b(?:if interested|to apply|how to apply|applicant requirements|requirements)\b/i);
+  return at >= 0 ? text.slice(at).replace(/\n{2,}/g, "\n").trim().slice(0, 2_000) : "";
+}
+
+/**
+ * "Start Pay Rate: $18.00" → "$18.00 per hour (stated start pay rate)". CSU student-assistant postings state their WAGE as
+ * a "pay rate" without a unit; a dollar rate under $100 there is hourly. Anything else (no "pay rate" wording, a larger
+ * figure) is left unknown. Pure.
+ */
+export function payRateText(text: string): string | null {
+  const m = text.match(/\b(?:start(?:ing)?\s+)?pay\s+rate\s*:?\s*\$\s?(\d{1,2}(?:\.\d{2})?)\b(?!\s*(?:k|,\d|\d))/i);
+  return m && Number(m[1]) > 0 ? `$${m[1]} per hour (stated start pay rate)` : null;
+}
+
+const PDF_MAX = 3_000_000;
+/** Text of a job-description PDF on www.sjsu.edu only (no other host is fetched), size- and time-limited. */
+async function pdfText(url: string): Promise<string | null> {
+  const u = new URL(url);
+  if (u.hostname !== "www.sjsu.edu" || !/\.pdf$/i.test(u.pathname)) return null;
+  const res = await fetch(u, { headers: { "user-agent": UA }, signal: AbortSignal.timeout(TIMEOUT), cache: "no-store" });
+  if (!res.ok) return null;
+  const buf = new Uint8Array(await res.arrayBuffer());
+  if (buf.byteLength > PDF_MAX) return null;
+  const { extractText, getDocumentProxy } = await import("unpdf");
+  const { text } = await extractText(await getDocumentProxy(buf), { mergePages: true });
+  return text.replace(/[ \t]+/g, " ").replace(/\n{2,}/g, "\n").trim() || null;
 }
 
 function payFromText(text: string): string | null {

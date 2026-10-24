@@ -1,5 +1,5 @@
 import { HttpError, ok, withUser } from "@/lib/api";
-import { loadActiveJobsForMatching, loadMatchProfile, matchColumns, toMatchJob } from "@/lib/discovery/agent";
+import { loadActiveJobsForMatching, loadMatchProfile, matchColumns, toFitJob, toMatchJob } from "@/lib/discovery/agent";
 import { checkEligibility } from "@/lib/domain/eligibility";
 import { explainMatch } from "@/lib/domain/explain";
 import { authGuidance, computeMatch } from "@/lib/domain/match";
@@ -18,7 +18,7 @@ export const POST = withUser<{ id: string }>(async ({ db, user }, { id }) => {
   const m = computeMatch(profile, matchJob);
   const eligibility = checkEligibility(profile, matchJob, m.distanceMiles);
   const { error } = await db.from("job_matches").upsert(
-    { user_id: user.id, job_id: id, ...matchColumns(profile, matchJob), computed_at: new Date().toISOString() },
+    { user_id: user.id, job_id: id, ...matchColumns(profile, matchJob, toFitJob(job)), computed_at: new Date().toISOString() },
     { onConflict: "user_id,job_id" },
   );
   if (error) throw error;

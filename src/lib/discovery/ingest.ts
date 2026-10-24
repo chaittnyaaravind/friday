@@ -12,7 +12,10 @@ import { extractRequirements } from "@/lib/domain/requirements";
 import { skillBySlug } from "@/lib/domain/skills";
 import { contentHash, descriptionHash, diffContent, writeJobEvents, type JobEventRow } from "./change";
 import { campusEmployerOf, classifyCampusRoles } from "@/lib/domain/campus";
+import { hourlyFromPay } from "@/lib/domain/campus-fit";
+import { exclusionColumn, staffReason } from "@/lib/domain/exclusions";
 import { parseHours } from "@/lib/domain/hours";
+import { assessPhysical } from "@/lib/domain/physical";
 import { closeDecision, type CloseBlock } from "./close-guard";
 import { privateCanonical, privateCompanySlug, privateExternalId } from "./import-scope";
 import { AGGREGATOR_SOURCES } from "./providers";
@@ -38,9 +41,14 @@ export function normalizePosting(p: RawPosting, company: { id: string; slug: str
   if (!p.onCampus && !loc.inBayArea && !loc.isRemote) return { skip: "outside-bay-area" };
 
   const category = p.onCampus ? classifyCategory(p.title, p.department ?? "") ?? "Campus" : classifyCategory(p.title, p.department ?? "");
-  const pay = parsePay(p.payText);
+  // A source's own pay field wins. For campus jobs the description is read as well, but only a figure with a STATED unit
+  // ("$18.50 per hour") is taken from prose — a bare "$500" is never turned into pay. Only an hourly unit becomes pay_hourly_*.
+  const fromText = p.onCampus ? parsePay(p.description) : null;
+  const pay = parsePay(p.payText) ?? (fromText?.unit ? fromText : null);
+  const hourly = hourlyFromPay(pay);
   const text = p.description ?? "";
   const hours = parseHours(text);
+  const physical = assessPhysical(text);
   const workStudy = /work[- ]study/i.test(`${p.title} ${text}`)
     ? /(?:must|required|only).{0,30}work[- ]study|work[- ]study (?:only|required)/i.test(text) ? "required" : "eligible"
     : p.onCampus ? "unknown" : "not_required";
@@ -64,6 +72,10 @@ export function normalizePosting(p: RawPosting, company: { id: string; slug: str
     pay_text: pay?.text ?? null,
     pay_min: pay?.min ?? null,
     pay_max: pay?.max ?? null,
+    pay_hourly_min: hourly.min,
+    pay_hourly_max: hourly.max,
+    physical_demand: physical.level,
+    physical_flags: physical.flags,
     hours_text: hours?.text ?? null,
     hours_min: hours?.min ?? null,
     hours_max: hours?.max ?? null,
@@ -79,6 +91,10 @@ export function normalizePosting(p: RawPosting, company: { id: string; slug: str
     apply_url: p.applyUrl,
     apply_url_is_official: !AGGREGATOR_SOURCES.has(p.source), // an aggregator's link is not the employer's own
     auth_restricted: isAuthRestricted(text),
+    // Exclusion rules (dining and food service) are decided here, in the backend, and recorded with the reason. The row is
+    // kept so a listing's open/closed state stays accurate, but search, matching, alerts, tailoring and packets skip it.
+    excluded_reason: exclusionColumn({ title: p.title, description: text, department: p.department, category, employer: p.employer ?? p.sourceName })
+      ?? (p.onCampus ? staffReason(p.title, pay?.unit) : null),
   };
   // Change detection: what a student would notice changing, hashed (see change.ts).
   row.content_hash = contentHash(row);
@@ -330,6 +346,9 @@ export async function importPosting(db: SupabaseClient, input: ImportInput, skil
   const text = input.description ?? "";
   const pay = parsePay(input.pay ?? text);
   const hours = parseHours(text);
+  const hourly = hourlyFromPay(pay);
+  const physical = assessPhysical(text);
+  const category = classifyCategory(input.title) ?? (input.onCampus ? "Campus" : null);
   const canonical = canonicalKey(company.slug, input.title, input.onCampus ? "sjsu" : loc.city, loc.isRemote);
   const source = IMPORT_SOURCE[input.source];
 
@@ -355,7 +374,7 @@ export async function importPosting(db: SupabaseClient, input: ImportInput, skil
           title: input.title.trim(),
           description: text.slice(0, 60_000) || null,
           employment_type: role.employmentType,
-          category: classifyCategory(input.title) ?? (input.onCampus ? "Campus" : null),
+          category,
           is_on_campus: Boolean(input.onCampus),
           location_text: input.location ?? null,
           city: input.onCampus ? "San Jose" : loc.city,
@@ -375,6 +394,13 @@ export async function importPosting(db: SupabaseClient, input: ImportInput, skil
           apply_url: input.url,
           apply_url_is_official: false, // the student's own link — never presented as the employer's
           auth_restricted: isAuthRestricted(text),
+          // The same backend rules as discovered listings: a dining import is excluded; desk/physical is read from its text.
+          pay_hourly_min: hourly.min,
+          pay_hourly_max: hourly.max,
+          physical_demand: physical.level,
+          physical_flags: physical.flags,
+          excluded_reason: exclusionColumn({ title: input.title, description: text, department: null, category, employer: input.company })
+            ?? (input.onCampus ? staffReason(input.title, pay?.unit) : null),
         })
         .select("id")
         .single();

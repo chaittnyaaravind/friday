@@ -9,6 +9,7 @@ import { z } from "zod";
 import { cached } from "./cache";
 import { AiMalformedError, complete } from "./client";
 import type { AiTask } from "./routing";
+import { styleFor } from "@/lib/writing/style";
 
 /** The JSON object in a model reply: as-is, unfenced, or the first `{` … last `}` if it added prose around it. */
 export function extractJson(reply: string): unknown {
@@ -84,8 +85,29 @@ export async function writeCoverLetter(resume: unknown, job: { title: string; co
   return structured({
     schema: CoverLetter,
     task: "resume_rewrite",
-    system:
-      "You write a concise, specific cover letter (under 280 words) for a student. Use only facts from <resume>. No invented experience, metrics, or enthusiasm clichés ('I am thrilled', 'passionate'). Plain, confident, human. Sign with the student's name if provided.",
+    system: `You write a concise, specific cover letter for a student applying to the job in <job>. Use only facts from <resume>; the posting tells you what the employer needs, never what the student has done. No invented experience, metrics, availability or enthusiasm.\n\n${styleFor("cover_letter")}`,
     user: `<resume>\n${JSON.stringify(resume)}\n</resume>\n<student_name>${name ?? ""}</student_name>\n<job title="${job.title}" company="${job.company}">\n${job.description.slice(0, 20_000)}\n</job>`,
+  });
+}
+
+// ───────────────────────── Application answers ─────────────────────────
+
+export const DraftAnswer = z.object({
+  answer: z.string().describe("The draft answer, or an empty string when the facts cannot answer the question"),
+  grounded_in: z.array(z.string()).describe("The profile facts the answer relies on, quoted"),
+  missing: z.string().nullable().describe("What real information the student would need to add to answer well, or null"),
+});
+
+/**
+ * Draft ONE short application answer from approved profile facts. Callers must have already refused personal declarations
+ * (apply/questions.ts) and must check the result for unsupported claims and style before showing it.
+ */
+export async function draftAnswer(question: string, facts: unknown, job: { title: string; company: string; description: string }) {
+  return structured({
+    schema: DraftAnswer,
+    task: "resume_rewrite",
+    maxTokens: 700,
+    system: `You draft a short answer to one job-application question for a student, using ONLY the facts in <facts>. The posting in <job> says what the employer needs; it is never evidence about the student. If the facts do not support an answer, return an empty answer and say in "missing" what the student should add. Never state work authorization, availability, schedule, pay expectations, references or anything about the student's legal status, health or identity.\n\n${styleFor("answer")}`,
+    user: `<question>${question.slice(0, 500)}</question>\n<facts>\n${JSON.stringify(facts).slice(0, 20_000)}\n</facts>\n<job title="${job.title}" company="${job.company}">\n${job.description.slice(0, 12_000)}\n</job>`,
   });
 }

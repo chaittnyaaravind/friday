@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { body, HttpError, ok, withUser } from "@/lib/api";
-import { place, STATUS_ORDER } from "@/lib/format";
+import { body, ok, withUser } from "@/lib/api";
+import { trackJob } from "@/lib/apply/track";
+import { STATUS_ORDER } from "@/lib/format";
 
 const Create = z.union([
   z.object({ jobId: z.string().uuid(), status: z.enum(STATUS_ORDER).optional() }),
@@ -30,33 +31,11 @@ export const GET = withUser(async ({ db, user }) => {
 /** POST /api/applications — track an opportunity (from a job, or added manually). */
 export const POST = withUser(async ({ db, user, req }) => {
   const input = await body(req, Create);
-  let row: Record<string, unknown>;
   if ("jobId" in input) {
-    // Already tracking this opportunity? Return it untouched — re-tracking must never reset a real status
-    // (an application in "interview" or "offer" going back to "saved" would silently destroy progress).
-    const { data: existing } = await db.from("applications").select("*").eq("user_id", user.id).eq("job_id", input.jobId).maybeSingle();
-    if (existing) return ok({ application: existing, existing: true });
-    const { data: job } = await db
-      .from("jobs")
-      .select("id, title, apply_url, discovered_at, is_on_campus, city, location_text, is_remote, companies(name), job_sources(source_name, is_official)")
-      .eq("id", input.jobId)
-      .maybeSingle();
-    if (!job) throw new HttpError(404, "Opportunity not found");
-    const sources = (job.job_sources as unknown as { source_name: string; is_official: boolean }[]) ?? [];
-    row = {
-      job_id: job.id,
-      company_name: (job.companies as unknown as { name: string } | null)?.name ?? "Unknown",
-      job_title: job.title,
-      location: place(job),
-      source: (sources.find((s) => s.is_official) ?? sources[0])?.source_name ?? null,
-      original_url: job.apply_url,
-      application_url: job.apply_url,
-      discovered_at: job.discovered_at,
-      status: input.status ?? "saved",
-    };
-  } else {
-    row = { ...input, status: input.status ?? "saved", original_url: input.application_url ?? null };
+    const { application, existing } = await trackJob(db, user.id, input.jobId, input.status);
+    return existing ? ok({ application, existing: true }) : ok({ application }, { status: 201 });
   }
+  const row = { ...input, status: input.status ?? "saved", original_url: input.application_url ?? null };
 
   const { data: app, error } = await db
     .from("applications")

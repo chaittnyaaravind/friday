@@ -18,8 +18,8 @@ const TYPES = [
 
 type Preset = { hideType?: boolean; hideCategory?: boolean; isF1?: boolean; campus?: boolean };
 
-/** The campus roles worth a one-tap pill; every role is in the "Filters" panel. */
-const QUICK_ROLES: CampusRole[] = ["student_assistant", "research_assistant", "lab_assistant", "tutor_mentor", "technical_media"];
+/** The campus roles worth a one-tap pill (office, front-desk and computer work first); every role is in the "Filters" panel. Dining is excluded by rule. */
+const QUICK_ROLES: CampusRole[] = ["front_desk_admin", "it_support", "library_assistant", "student_assistant", "research_assistant", "lab_assistant"];
 
 export function Filters({ preset = {}, total }: { preset?: Preset; total: number }) {
   const router = useRouter();
@@ -58,9 +58,10 @@ export function Filters({ preset = {}, total }: { preset?: Preset; total: number
         </label>
         <div className="flex gap-2">
           <Select value={sp.get("sort") ?? ""} onChange={(e) => set({ sort: e.target.value || null })} className="h-11 w-auto min-w-[150px]" aria-label="Sort">
-            <option value="">Best match</option>
+            <option value="">{preset.campus ? "Best campus fit" : "Best match"}</option>
+            {preset.campus && <option value="pay">Highest stated pay</option>}
             <option value="new">Newest</option>
-            <option value="distance">Closest</option>
+            {!preset.campus && <option value="distance">Closest</option>}
             <option value="deadline">Deadline soon</option>
             {sp.get("q") && <option value="relevance">Keyword relevance</option>}
           </Select>
@@ -79,10 +80,16 @@ export function Filters({ preset = {}, total }: { preset?: Preset; total: number
           QUICK_ROLES.map((r) => (
             <Pill key={r} on={sp.get("campusRole") === r} onClick={() => set({ campusRole: sp.get("campusRole") === r ? null : r })}>{CAMPUS_ROLE_LABEL[r]}</Pill>
           ))}
-        <Pill on={(sp.get("level") ?? "").split(",").includes("new_grad")} onClick={() => set({ level: sp.get("level") === "new_grad" ? null : "new_grad" })}>New grad</Pill>
-        <Pill on={(sp.get("level") ?? "").split(",").includes("entry")} onClick={() => set({ level: sp.get("level") === "entry" ? null : "entry" })}>Entry level</Pill>
-        <Pill on={sp.get("remote") === "1"} onClick={() => toggle("remote")}>Remote</Pill>
-        <Pill on={sp.get("hybrid") === "1"} onClick={() => toggle("hybrid")}>Hybrid</Pill>
+        {preset.campus ? (
+          <Pill on={sp.get("physical") === "low"} onClick={() => set({ physical: sp.get("physical") === "low" ? null : "low" })}>Desk-based</Pill>
+        ) : (
+          <>
+            <Pill on={(sp.get("level") ?? "").split(",").includes("new_grad")} onClick={() => set({ level: sp.get("level") === "new_grad" ? null : "new_grad" })}>New grad</Pill>
+            <Pill on={(sp.get("level") ?? "").split(",").includes("entry")} onClick={() => set({ level: sp.get("level") === "entry" ? null : "entry" })}>Entry level</Pill>
+            <Pill on={sp.get("remote") === "1"} onClick={() => toggle("remote")}>Remote</Pill>
+            <Pill on={sp.get("hybrid") === "1"} onClick={() => toggle("hybrid")}>Hybrid</Pill>
+          </>
+        )}
         <Pill on={sp.get("saved") === "1"} onClick={() => toggle("saved")}>Saved</Pill>
         <Pill on={sp.get("hideBlocked") === "1"} onClick={() => toggle("hideBlocked")}>Hide likely blocked</Pill>
         {preset.isF1 && <Pill on={sp.get("hideRestricted") === "1"} onClick={() => toggle("hideRestricted")}>Hide citizenship/clearance-only</Pill>}
@@ -93,16 +100,32 @@ export function Filters({ preset = {}, total }: { preset?: Preset; total: number
 
       {more && (
         <div className="reveal card grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Sel label="Distance" value={sp.get("miles") ?? ""} onChange={(v) => set({ miles: v || null })}>
-            <option value="">Any distance</option>
-            <option value="5">Within 5 miles</option>
-            <option value="10">Within 10 miles</option>
-            <option value="25">Within 25 miles</option>
-            <option value="50">Within 50 miles</option>
-            <option value="100">Within 100 miles</option>
-          </Sel>
+          {!preset.campus && (
+            <Sel label="Distance" value={sp.get("miles") ?? ""} onChange={(v) => set({ miles: v || null })}>
+              <option value="">Any distance</option>
+              <option value="5">Within 5 miles</option>
+              <option value="10">Within 10 miles</option>
+              <option value="25">Within 25 miles</option>
+              <option value="50">Within 50 miles</option>
+              <option value="100">Within 100 miles</option>
+            </Sel>
+          )}
           {preset.campus && (
             <>
+              {/* Only STATED hourly pay passes a minimum: a listing that does not state pay is hidden by it, never assumed to pay enough. */}
+              <Sel label="Minimum stated pay" value={sp.get("minPay") ?? ""} onChange={(v) => set({ minPay: v || null })}>
+                <option value="">Any pay (incl. not stated)</option>
+                <option value="18">$18/hr or more</option>
+                <option value="20">$20/hr or more</option>
+                <option value="22">$22/hr or more</option>
+                <option value="25">$25/hr or more</option>
+              </Sel>
+              <Sel label="Physical demand" value={sp.get("physical") ?? ""} onChange={(v) => set({ physical: v || null })}>
+                <option value="">Any</option>
+                <option value="low">Desk-based (stated in the duties)</option>
+                <option value="low,unknown">Desk-based or not stated</option>
+                <option value="low,moderate,unknown">Hide physically demanding</option>
+              </Sel>
               <Sel label="Campus role" value={sp.get("campusRole") ?? ""} onChange={(v) => set({ campusRole: v || null })}>
                 <option value="">Any role</option>
                 {CAMPUS_ROLES.filter((r) => r !== "other").map((r) => (
@@ -117,7 +140,7 @@ export function Filters({ preset = {}, total }: { preset?: Preset; total: number
               </Sel>
             </>
           )}
-          {!preset.hideCategory && (
+          {!preset.hideCategory && !preset.campus && (
             <Sel label="Category" value={sp.get("category") ?? ""} onChange={(v) => set({ category: v || null })}>
               <option value="">All categories</option>
               {CATEGORIES.map((c) => (
@@ -146,6 +169,7 @@ export function Filters({ preset = {}, total }: { preset?: Preset; total: number
             <option value="linkedin_import,indeed_import">LinkedIn / Indeed (imported by you)</option>
             <option value="manual">Added by you</option>
           </Sel>
+          {!preset.campus && (<>
           <Sel label="Skill" value={sp.get("skills") ?? ""} onChange={(v) => set({ skills: v || null })}>
             <option value="">Any skill</option>
             {["java", "python", "javascript", "typescript", "cpp", "go", "react", "nodejs", "sql", "aws", "ml", "pytorch", "kubernetes", "embedded", "linux"].map((s) => (
@@ -158,6 +182,7 @@ export function Filters({ preset = {}, total }: { preset?: Preset; total: number
               <option key={i} value={i}>{i}</option>
             ))}
           </Sel>
+          </>)}
           <div className="flex items-end">
             <button onClick={() => start(() => router.replace(path, { scroll: false }))} className="inline-flex h-10 items-center gap-1.5 text-[13px] text-muted hover:text-text">
               <X size={14} /> Clear all

@@ -6,6 +6,8 @@
  *   - the student opens the official application link (handOff returns it only for an approved, unchanged, still-open packet)
  *   - the student submits on the employer's site and tells FRIDAY (the tracker's existing "Applied" move)
  */
+import { excludedMessage } from "@/lib/domain/exclusions";
+import { ANSWER_DRAFT_TITLE } from "./questions";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { HttpError } from "@/lib/api";
 import type { EligibilityResult } from "@/lib/domain/eligibility";
@@ -60,9 +62,10 @@ async function loadApplication(db: SupabaseClient, userId: string, applicationId
 
 /** The listing as it is RIGHT NOW — status, deadline and link are re-read every time, never trusted from a snapshot. */
 async function loadLiveJob(db: SupabaseClient, jobId: string) {
-  const { data: job, error } = await db.from("jobs").select("id, title, status, deadline, apply_url, description, company_id").eq("id", jobId).maybeSingle();
+  const { data: job, error } = await db.from("jobs").select("id, title, status, deadline, apply_url, description, company_id, excluded_reason").eq("id", jobId).maybeSingle();
   if (error) throw error;
   if (!job) throw new HttpError(404, "This opportunity no longer exists.");
+  if (job.excluded_reason) throw new HttpError(409, excludedMessage(job.excluded_reason as string));
   const [{ data: company }, { data: sources }] = await Promise.all([
     db.from("companies").select("name").eq("id", job.company_id).maybeSingle(),
     db.from("job_sources").select("source_name, is_official").eq("job_id", jobId),
@@ -141,8 +144,12 @@ export async function buildAndSavePacket(db: SupabaseClient, userId: string, app
 
   // The cover letter: the student's text if they gave one; else the last packet's; else the tracker's draft. A text that is
   // exactly an AI draft FRIDAY saved stays marked as AI-drafted, so it cannot lose its confirmation by being re-saved untouched.
-  const { data: docs } = await db.from("application_documents").select("kind, content").eq("application_id", applicationId).eq("user_id", userId);
-  const aiDrafts = ((docs ?? []) as { kind: string; content: string | null }[]).filter((d) => d.kind === "cover_letter" && d.content).map((d) => d.content!.trim());
+  const { data: docs } = await db.from("application_documents").select("kind, title, content").eq("application_id", applicationId).eq("user_id", userId);
+  const docRows = (docs ?? []) as { kind: string; title?: string | null; content: string | null }[];
+  const aiDrafts = docRows.filter((d) => d.kind === "cover_letter" && d.content).map((d) => d.content!.trim());
+  // AI-drafted answers are saved as documents titled "Answer draft — …" (api/applications/[id]/answers). An answer that is
+  // exactly one of them is marked ai_draft, whatever the browser claims; an edited one is the student's own.
+  const answerDrafts = new Set(docRows.filter((d) => d.kind === "other" && d.title?.startsWith(ANSWER_DRAFT_TITLE) && d.content).map((d) => d.content!.trim()));
   const origin = (text: string) => (aiDrafts.includes(text.trim()) ? ("ai_draft" as const) : ("student" as const));
   let coverLetter: { text: string; origin: "student" | "ai_draft" } | null;
   if (opts.coverLetter === null) coverLetter = null;
@@ -153,7 +160,8 @@ export async function buildAndSavePacket(db: SupabaseClient, userId: string, app
   const packet = buildPacket({
     job, description, profile: profileFrom(profileRow as Row | null, items), resume, coverLetter,
     eligibility: job.status === "active" ? await deps.eligibility(job.id) : null,
-    extra: opts.extra ?? previous?.packet.extra ?? [], builtAt: new Date(now).toISOString(),
+    extra: (opts.extra ?? previous?.packet.extra ?? []).map((e) => ({ ...e, origin: e.answer && answerDrafts.has(e.answer.trim()) ? ("ai_draft" as const) : ("student" as const) })),
+    builtAt: new Date(now).toISOString(),
   });
   const contentHash = packetHash(packet);
 

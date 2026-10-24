@@ -1,0 +1,83 @@
+/**
+ * The Telegram messages the hunter sends. Pure: data in, { text, buttons } out (Telegram HTML, under its 4,096-char limit).
+ *
+ * The job card must let the student decide from their phone: what the job is, whether it is desk work and why, pay, how
+ * their resume was tailored and how it measures up, and EXACTLY what "Approve" will do — including the email text that
+ * will be sent and every confirmation the approval counts as ticking. Nothing is stated that FRIDAY did not read.
+ */
+import { CONFIRM_TEXT } from "@/lib/apply/packet";
+import { LEVEL_LABEL, type PhysicalLevel } from "@/lib/domain/physical";
+import type { ApplyChannel } from "./apply-channel";
+
+export type Button = { text: string; data?: string; url?: string };
+export type TgMessage = { text: string; buttons: Button[][] };
+
+export type HuntCard = {
+  itemId: string;
+  job: { title: string; employer: string; payText: string | null; physical: PhysicalLevel; physicalWhy: string[]; deskWhy: string[]; source: string; url: string | null; deadline: string | null };
+  score: number | null;
+  research: { summary: string; required: string[] } | null;
+  resume: { label: string; matched: number; total: number; missing: string[]; changes: string[]; verified: boolean } | null;
+  channel: ApplyChannel;
+  email: { to: string; subject: string; body: string } | null;
+  confirmations: string[];
+  blockers: string[];
+  appUrl: string;
+};
+
+const MAX = 4000;
+export const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+
+export function huntCard(c: HuntCard): TgMessage {
+  const L: string[] = [];
+  L.push(`🆕 <b>${esc(c.job.title)}</b>`, esc(c.job.employer));
+  const facts = [c.job.payText ? `💵 ${esc(c.job.payText)}` : "💵 pay not stated", `🪑 ${esc(LEVEL_LABEL[c.job.physical])}`, c.score != null ? `🎯 ${c.score}% fit` : null, c.job.deadline ? `⏳ apply by ${esc(c.job.deadline)}` : null];
+  L.push(facts.filter(Boolean).join(" · "));
+  if (c.job.deskWhy.length) L.push(`Desk work: ${esc(c.job.deskWhy.slice(0, 4).join(", "))}`);
+  if (c.job.physicalWhy.length) L.push(`Physical: ${esc(c.job.physicalWhy.slice(0, 3).join("; "))}`);
+  L.push(`Source: ${esc(c.job.source)}`);
+
+  if (c.research) {
+    L.push("", "<b>What it is</b>", esc(clip(c.research.summary, 400)));
+    if (c.research.required.length) L.push(`Asks for: ${esc(c.research.required.slice(0, 8).join(", "))}`);
+  }
+
+  if (c.resume) {
+    L.push("", `<b>Your resume</b> — ${esc(c.resume.label)}${c.resume.verified ? " ✅ every line checked against your profile" : " ⚠️ not verified"}`);
+    if (c.resume.total) L.push(`Covers ${c.resume.matched} of ${c.resume.total} things the posting asks for.`);
+    if (c.resume.changes.length) L.push(`Tailored: ${esc(clip(c.resume.changes.slice(0, 3).join("; "), 300))}`);
+    if (c.resume.missing.length) L.push(`Not on your profile (left out, never invented): ${esc(c.resume.missing.slice(0, 5).join(", "))}`);
+  } else L.push("", "⚠️ No tailored resume: upload and review your resume in FRIDAY first.");
+
+  L.push("");
+  if (c.blockers.length) {
+    L.push("⛔ <b>Can't approve yet</b>", ...c.blockers.slice(0, 4).map((b) => `• ${esc(b)}`));
+  } else if (c.channel.kind === "email" && c.email) {
+    L.push(`<b>Approve = send this from your Gmail</b> to ${esc(c.email.to)}, with your resume attached as a PDF:`, `<i>${esc(c.email.subject)}</i>`, `<blockquote>${esc(clip(c.email.body, 900))}</blockquote>`);
+  } else {
+    L.push("<b>Approve = FRIDAY sends you the resume PDF and the official link</b>; you submit there, then tap “I applied”.");
+    if (c.channel.kind === "site") L.push(esc(c.channel.reason));
+  }
+  if (!c.blockers.length && c.confirmations.length) L.push("", "Approving also confirms:", ...c.confirmations.map((k) => `• ${esc(CONFIRM_TEXT[k] ?? k)}`));
+
+  let text = L.join("\n");
+  // Every part is clipped above, so this is a backstop. Tags are dropped first so a cut never leaves broken HTML.
+  if (text.length > MAX) text = `${text.replace(/<\/?(?:b|i|blockquote)>/g, "").slice(0, MAX - 1).replace(/&[a-z]*$/, "")}…`;
+
+  const buttons: Button[][] = [];
+  if (!c.blockers.length && c.resume) buttons.push([{ text: c.channel.kind === "email" ? "✅ Approve & send" : "✅ Approve", data: `ap:${c.itemId}` }]);
+  buttons.push([{ text: "📄 Review in FRIDAY", url: c.appUrl }, ...(c.job.url ? [{ text: "🔗 Posting", url: c.job.url }] : [])]);
+  buttons.push([{ text: "⏭ Skip", data: `sk:${c.itemId}` }]);
+  return { text, buttons };
+}
+
+export const sentNotice = (o: { title: string; employer: string; to: string; at: string }): TgMessage => ({
+  text: `✅ <b>Sent</b> — ${esc(o.title)} (${esc(o.employer)})\nFrom your Gmail to ${esc(o.to)} at ${esc(o.at)}.\nMarked “applied” in your tracker; FRIDAY will remind you to follow up in a week.`,
+  buttons: [],
+});
+
+export const handOffNotice = (o: { itemId: string; title: string; url: string; reason: string | null }): TgMessage => ({
+  text: `👍 Approved — ${esc(o.title)}\nYour tailored resume is attached.${o.reason ? `\n${esc(o.reason)}` : ""}\nSubmit on the official page, then tap “I applied”.`,
+  buttons: [[{ text: "🔗 Open the application", url: o.url }], [{ text: "📨 I applied", data: `dn:${o.itemId}` }]],
+});
