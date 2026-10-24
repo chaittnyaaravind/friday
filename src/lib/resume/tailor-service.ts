@@ -39,7 +39,7 @@ export async function tailorResume(db: SupabaseClient, userId: string, input: Ta
   const jobText = [job.title, job.description, job.requirements.join("\n")].filter(Boolean).join("\n");
 
   // Preview: exactly what would change, including the spelling changes — nothing is created.
-  const rewrite = (doc: ResumeDoc) => (input.ai === false ? Promise.resolve({ doc, changes: [] as AiTailorChange[], note: null }) : aiTailor(doc, { userId, keywords: proposal.keywords, items }));
+  const rewrite = (doc: ResumeDoc) => (input.ai === false ? Promise.resolve({ doc, changes: [] as AiTailorChange[], note: null }) : aiTailor(doc, { userId, keywords: proposal.keywords, items, job: { title: job.title, text: jobText } }));
   if (!input.accept) {
     const { doc, changes } = applyTerminology(buildTailored(items, proposal, proposal.options.exclude), jobText);
     const ai = await rewrite(doc);

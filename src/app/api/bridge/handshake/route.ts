@@ -6,6 +6,7 @@ import { importPosting } from "@/lib/discovery/ingest";
 import { isHandshakeSender, parseHandshakeAlert } from "@/lib/hunter/handshake-mail";
 import { bridgeUser } from "@/lib/hunter/link";
 import { enqueue, processQueue } from "@/lib/hunter/pipeline";
+import { SJSU_ONLY } from "@/lib/scope";
 import { createSupabaseAdmin } from "@/lib/supabase/server";
 
 export const maxDuration = 300;
@@ -32,7 +33,7 @@ export async function POST(req: Request) {
     const since = new Date(Date.now() - 24 * 3_600_000).toISOString();
     const { count } = await db.from("job_sources").select("id", { count: "exact", head: true }).eq("imported_by", userId).gte("first_seen_at", since);
     let budget = IMPORT_DAILY_LIMIT - (count ?? 0);
-    const report = { messages: 0, alreadyRead: 0, notHandshake: 0, jobs: 0, limited: 0 };
+    const report = { messages: 0, alreadyRead: 0, notHandshake: 0, jobs: 0, offCampus: 0, limited: 0 };
     const jobIds: string[] = [];
     let skills: Map<string, number> | null = null;
 
@@ -53,11 +54,17 @@ export async function POST(req: Request) {
         skills = await skillIdMap(db);
       }
       for (const j of jobs) {
+        // SJSU-only (lib/scope.ts): off-campus cards from weekly round-ups are not imported.
+        if (SJSU_ONLY && !j.onCampus) {
+          report.offCampus++;
+          continue;
+        }
         if (budget <= 0) {
           report.limited++;
           continue;
         }
-        const { jobId } = await importPosting(db, { url: j.url, title: j.title, company: j.employer ?? "Handshake employer", source: "handshake", onCampus: j.onCampus, description: null }, skills!, userId);
+        // The card's own line ("$18.45/hr • On Campus Student Employment • San Jose, CA (Onsite)") is all FRIDAY knows; the student opens the link for the rest.
+        const { jobId } = await importPosting(db, { url: j.url, title: j.title, company: j.employer ?? "Handshake employer", source: "handshake", onCampus: j.onCampus, description: j.meta, pay: j.payText ?? undefined }, skills!, userId);
         budget--;
         jobIds.push(jobId);
         report.jobs++;

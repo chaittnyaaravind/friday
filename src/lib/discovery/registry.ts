@@ -186,8 +186,11 @@ export const REGISTRY: RegistryCompany[] = [
 
   // ── SJSU on-campus employers. Each entry below was checked against the live source on 2026-09-27 (see capabilities.ts). ──
   // Official hiring pages that list individual postings:
-  sjsu("sjsu-associated-students", "SJSU Associated Students", "https://www.sjsu.edu/as/jobs/index.php", "Associated Students"),
-  sjsu("sjsu-library", "SJSU King Library", "https://library.sjsu.edu/employment/employment-opportunities/", "King Library"),
+  // Associated Students lists its openings on this page but hosts them in its ADP career center, which is read directly
+  // (verified 2026-10-24): full descriptions and pay, and only openings that are still live.
+  sjsu("sjsu-associated-students", "SJSU Associated Students", "https://www.sjsu.edu/as/jobs/index.php", "Associated Students", { adpCid: "1f21e958-d199-4456-afb9-29fa26ef70be", adpCcId: "19000101_000001" }),
+  // Each Library opening links its job description as an Acrobat share; FRIDAY reads the PDF behind it (details: "acrobat").
+  sjsu("sjsu-library", "SJSU King Library", "https://library.sjsu.edu/employment/employment-opportunities/", "King Library", { details: "acrobat" }),
   // Cohort recruitments (one section per role, an explicit due date). The previous Peer Connections address now redirects to
   // the department's home page; its real hiring page is /about/our-team.php.
   sjsu("sjsu-peer-connections", "SJSU Peer Connections", "https://www.sjsu.edu/peerconnections/about/our-team.php", "Peer Connections", { mode: "recruitment" }),

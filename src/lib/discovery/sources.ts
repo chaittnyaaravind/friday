@@ -470,6 +470,68 @@ export function parseRecruitmentPage(html: string, c: CompanyFeed, now: number):
   }));
 }
 
+// ── ADP Workforce Now career centers ───────────────────────────────────────────────────────────────
+// Associated Students links each opening to its ADP career center (workforcenow.adp.com …recruitment.html?cid=…&jobId=…).
+// That career center serves its own public JSON (verified live 2026-10-24): a list of requisitions, then one detail per
+// requisition with the full posting HTML ("Full/Part-Time: Part-Time, Student", "Compensation: $18.45 per hour", duties).
+// It is the source of truth: an opening the AS page still links but ADP no longer lists (Office Assistant, 2026-10-24) is
+// closed. Only student postings are kept: the posting says "Student" in its Full/Part-Time line, or the title is a
+// student-level title. Staff roles (Head Teacher, Program Coordinator) are not.
+type AdpReq = {
+  itemID: string; requisitionTitle: string; postDate?: string; requisitionDescription?: string;
+  customFieldGroup?: { stringFields?: { nameCode?: { codeValue?: string }; stringValue?: string }[] };
+};
+const ADP = "https://workforcenow.adp.com/mascsr/default/careercenter/public/events/staffing/v1/job-requisitions";
+
+export function adpStudentPosting(title: string, description: string): boolean {
+  const kind = /Full\/Part-Time:\s*([^\n]{0,60})/i.exec(description)?.[1] ?? "";
+  return /\bstudent\b/i.test(kind) || isCampusTitle(title);
+}
+
+export function mapAdpRequisition(r: AdpReq, c: CompanyFeed): RawPosting | null {
+  const description = decodeUntilStable(htmlToText(decodeUntilStable(r.requisitionDescription ?? ""))).replace(/\n{3,}/g, "\n\n").trim();
+  if (!has(r.requisitionTitle) || !description || !adpStudentPosting(r.requisitionTitle, description)) return null;
+  const jobId = r.customFieldGroup?.stringFields?.find((f) => f.nameCode?.codeValue === "ExternalJobID")?.stringValue ?? null;
+  const applyUrl = `https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html?cid=${encodeURIComponent(c.config.adpCid)}&ccId=${encodeURIComponent(c.config.adpCcId ?? "19000101_000001")}&type=JS&lang=en_US${jobId ? `&jobId=${encodeURIComponent(jobId)}` : ""}`;
+  const comp = /Compensation:\s*(\$[\d.,]+(?:\s*[–-]\s*\$?[\d.,]+)?\s*(?:per hour|\/\s*hr|an hour|hourly))/i.exec(description)?.[1] ?? null;
+  const dept = /Department:\s*([^\n]{2,80}?)\s*(?:\n|FLSA|Full\/Part)/i.exec(description)?.[1]?.trim() ?? null;
+  const posted = r.postDate && /^\d{4}-\d{2}-\d{2}/.test(r.postDate) ? new Date(`${r.postDate.slice(0, 19)}Z`).toISOString() : null;
+  return {
+    source: "sjsu_page",
+    sourceName: `${c.name} (ADP)`,
+    externalId: `adp:${r.itemID}`,
+    title: r.requisitionTitle.trim(),
+    applyUrl,
+    sourceUrl: c.config.url,
+    locationText: "San Jose, CA (SJSU Campus)",
+    department: dept ?? c.config.department ?? c.name,
+    description: description.slice(0, 20_000),
+    postedAt: posted,
+    commitment: "Part-time",
+    payText: comp ?? payFromText(description),
+    isRemoteHint: false,
+    onCampus: true,
+  };
+}
+
+async function adpCareerCenter(c: CompanyFeed): Promise<RawPosting[]> {
+  const cid = c.config.adpCid ?? "";
+  const ccId = c.config.adpCcId ?? "19000101_000001";
+  if (!/^[0-9a-f-]{36}$/i.test(cid) || !/^[0-9_]{6,30}$/.test(ccId)) throw new SourceError("invalid ADP career center id", "workforcenow.adp.com");
+  const q = `cid=${cid}&timeStamp=${Date.now()}&lang=en_US&ccId=${ccId}&locale=en_US`;
+  const list = await getJSON<{ jobRequisitions?: AdpReq[] }>(`${ADP}?${q}&$top=100`);
+  const reqs = usable<AdpReq>(list?.jobRequisitions, (r) => has(r.itemID) && has(r.requisitionTitle), "jobRequisitions", ADP);
+  const out: RawPosting[] = [];
+  for (const r of reqs.slice(0, 40)) {
+    if (!/^[0-9_]{5,30}$/.test(r.itemID)) continue;
+    const detail = await getJSON<AdpReq>(`${ADP}/${r.itemID}?${q}`).catch(() => null);
+    const p = detail ? mapAdpRequisition({ ...r, ...detail }, c) : null;
+    if (p) out.push(p);
+    await new Promise((res) => setTimeout(res, 250));
+  }
+  return out;
+}
+
 // ── Application-window pages ──────────────────────────────────────────────────────────────────
 // University Housing Services (/housing/about-us/employment-opportunities.php) names its student roles in plain paragraphs
 // and states the cycle as "Applications open: November 2, 2026 / Applications close: January 25, 2027" (verified live
@@ -534,12 +596,30 @@ const JOB_WORD = /\b(?:assistant|clerk|aide|tutor|mentor|leader|ambassador|advis
 const JOB_HOST = /workforcenow\.adp\.com|icims\.com|applitrack\.com|joinhandshake\.com|dineoncampus\.com|bncollegejobs\.com|governmentjobs\.com|calcareers\.ca\.gov|jobs\.|careers\./i;
 
 async function sjsuPage(c: CompanyFeed): Promise<RawPosting[]> {
+  // An employer page whose openings live in an ADP career center: read the career center itself (see adpCareerCenter).
+  if (c.config.adpCid) return adpCareerCenter(c);
   const res = await fetch(c.config.url, { headers: { "user-agent": UA }, signal: AbortSignal.timeout(TIMEOUT), cache: "no-store" });
   if (!res.ok) throw new SourceError(`${res.status} ${res.statusText}`, c.config.url, res.status);
   const html = await res.text();
   if (c.config.mode === "recruitment") return parseRecruitmentPage(html, c, Date.now());
   if (c.config.mode === "window") return parseWindowPage(html, c, Date.now());
   const postings = parseListPage(html, c);
+  if (c.config.details === "acrobat") {
+    // King Library: each opening links its job description as an Acrobat share. Read it for duties and pay; the link
+    // stays the apply link (the PDF says how to apply). One failure leaves that posting as it was.
+    for (const p of postings) {
+      const read = () => acrobatText(p.applyUrl).catch(() => null);
+      const text = /^https:\/\/acrobat\.adobe\.com\//i.test(p.applyUrl) ? (await read()) ?? (await read()) : null; // one retry
+      if (text) {
+        p.description = text.slice(0, 20_000);
+        // The Library states pay as "Initial Hourly Rate … Undergraduate Students - $18.45" (verified 2026-10-24).
+        const rate = /hourly rate[\s\S]{0,120}?\$\s?(\d{2}(?:\.\d{2})?)/i.exec(text)?.[1];
+        p.payText = payRateText(text) ?? payFromText(text) ?? (rate ? `$${rate}/hr` : null);
+      }
+      await new Promise((r) => setTimeout(r, 400));
+    }
+    return postings;
+  }
   if (c.config.details !== "pdf") return postings;
   // Pages whose openings link to job-description PDFs on sjsu.edu (Parking Services): read each PDF for the duties and the
   // stated pay. One PDF failing leaves that posting with the plain description; it never fails the source.
@@ -620,9 +700,37 @@ export function payRateText(text: string): string | null {
 
 const PDF_MAX = 3_000_000;
 /** Text of a job-description PDF on www.sjsu.edu only (no other host is fetched), size- and time-limited. */
+// Hosts a job-description PDF may come from: SJSU's own site, or the Adobe storage behind an Acrobat share link.
+const ADOBE_BLOB = /^acp-aep-cs-blobstore-prod-[a-z0-9]+-data\.adobe\.io$/;
+
+/**
+ * An Acrobat share page (acrobat.adobe.com/id/urn:aaid:…, how the King Library links each job description; verified
+ * 2026-10-24) embeds a short-lived signed download link for the PDF on Adobe's storage. Pure: the first such link, or null.
+ */
+export function acrobatPdfUrl(html: string): string | null {
+  for (const m of html.matchAll(/https:\/\/[a-z0-9.-]+\.adobe\.io\/[^"'\s<>\\]+/gi)) {
+    const raw = m[0].replace(/&amp;/g, "&");
+    try {
+      const u = new URL(raw);
+      if (ADOBE_BLOB.test(u.hostname) && /application%2Fpdf|application\/pdf/i.test(raw)) return u.toString();
+    } catch { /* not a URL */ }
+  }
+  return null;
+}
+
+async function acrobatText(url: string): Promise<string | null> {
+  const u = new URL(url);
+  if (u.hostname !== "acrobat.adobe.com" || !/^\/id\/urn:aaid:sc:/i.test(u.pathname)) return null;
+  const res = await fetch(u, { headers: { "user-agent": UA }, signal: AbortSignal.timeout(TIMEOUT), cache: "no-store" });
+  if (!res.ok) return null;
+  const pdf = acrobatPdfUrl(await res.text());
+  return pdf ? pdfText(pdf) : null;
+}
+
 async function pdfText(url: string): Promise<string | null> {
   const u = new URL(url);
-  if (u.hostname !== "www.sjsu.edu" || !/\.pdf$/i.test(u.pathname)) return null;
+  const sjsu = u.hostname === "www.sjsu.edu" && /\.pdf$/i.test(u.pathname);
+  if (!sjsu && !ADOBE_BLOB.test(u.hostname)) return null;
   const res = await fetch(u, { headers: { "user-agent": UA }, signal: AbortSignal.timeout(TIMEOUT), cache: "no-store" });
   if (!res.ok) return null;
   const buf = new Uint8Array(await res.arrayBuffer());

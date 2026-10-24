@@ -66,13 +66,25 @@ export async function enqueue(db: SupabaseClient, jobIds: string[], opts: { user
 
 /** Prepare and announce queued items until `deadline` (ms epoch). One failing item never stops the others. */
 export async function processQueue(db: SupabaseClient, opts: { deadline: number; userId?: string; limit?: number }) {
-  const report = { notified: 0, failed: 0, stale: 0, pending: 0 };
+  const report = { notified: 0, failed: 0, stale: 0, pending: 0, waiting: 0 };
   if (!telegramConfigured()) return { ...report, skipped: "telegram-not-configured" as const };
   let q = db.from("hunt_items").select("id, user_id, job_id, attempts").eq("state", "queued").lt("attempts", MAX_ATTEMPTS).order("created_at").limit(opts.limit ?? 15);
   if (opts.userId) q = q.eq("user_id", opts.userId);
   const { data: items, error } = await q;
   if (error) throw error;
+  // A card without a tailored resume can't be approved, so a student with no confirmed resume facts gets ONE reminder
+  // and their items wait (still queued, attempts untouched) until they upload; the next tick then prepares them.
+  const ready = new Map<string, boolean>();
+  for (const uid of new Set((items ?? []).map((i) => i.user_id as string))) {
+    const { data: facts } = await db.from("candidate_items").select("id").eq("user_id", uid).neq("status", "requires_confirmation").limit(1);
+    ready.set(uid, Boolean(facts?.length));
+    if (!facts?.length) await remindToUpload(db, uid);
+  }
   for (const it of items ?? []) {
+    if (!ready.get(it.user_id as string)) {
+      report.waiting++;
+      continue;
+    }
     if (Date.now() > opts.deadline) {
       report.pending++;
       continue;
@@ -87,6 +99,24 @@ export async function processQueue(db: SupabaseClient, opts: { deadline: number;
     }
   }
   return report;
+}
+
+export const NEEDS_RESUME = "needs_resume";
+
+/** One reminder per wait: items already marked NEEDS_RESUME mean the student was told. */
+async function remindToUpload(db: SupabaseClient, userId: string) {
+  const { data: marked } = await db.from("hunt_items").select("id").eq("user_id", userId).eq("state", "queued").eq("error", NEEDS_RESUME).limit(1);
+  if (marked?.length) return;
+  const { data: link } = await db.from("hunter_links").select("telegram_chat_id").eq("user_id", userId).maybeSingle();
+  const { data: waiting } = await db.from("hunt_items").select("id").eq("user_id", userId).eq("state", "queued");
+  const count = waiting?.length ?? 0;
+  if (link?.telegram_chat_id) {
+    await sendMessage(link.telegram_chat_id as number, {
+      text: `📄 ${count} SJSU desk job${count === 1 ? " is" : "s are"} waiting for you, but FRIDAY has no resume for this account yet.\nUpload your resume in FRIDAY → Resume and confirm what it found. Within 5 minutes the jobs arrive here with a tailored resume, ready to approve.`,
+      buttons: [[{ text: "Upload resume", url: `${siteUrl()}/resume` }]],
+    });
+  }
+  await db.from("hunt_items").update({ error: NEEDS_RESUME, updated_at: new Date().toISOString() }).eq("user_id", userId).eq("state", "queued");
 }
 
 const withTimeout = <T>(p: Promise<T>, ms: number) => Promise.race([p, new Promise<null>((r) => setTimeout(() => r(null), ms))]);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { campusScreens, coveredKeywords } from "./campus-screens";
+import { campusScreens, coveredKeywords, dutyTargets } from "./campus-screens";
 
 // Modeled on real SJSU postings read by FRIDAY (Parking Services Office Student Assistant, King Library IT Helpdesk).
 const parkingOffice = `Parking Services Office Student Assistant. Assist customers at the front counter, answer phones and questions,
@@ -40,5 +40,18 @@ Education: San Jose State University, GPA: 3.4`;
 
   it("asks nothing the posting does not ask", () => {
     expect(campusScreens("Shelve books in the stacks.", "anything")).toEqual([]);
+  });
+});
+
+describe("dutyTargets", () => {
+  const helpdesk = "Provide first-level technical support and troubleshooting for library patrons and staff.";
+  it("names a posting duty only for a line whose own words describe that work", () => {
+    expect(dutyTargets(helpdesk, "Helped students debug Java and Python assignments during weekly lab hours")).toEqual(["technical support", "troubleshooting", "customer service"]); // helping students is serving patrons too
+    expect(dutyTargets(helpdesk, "Built REST API endpoints in Node.js")).toEqual([]);
+    expect(dutyTargets("Greet customers at the front counter.", "Greeted visitors at the museum entrance")).toEqual(["customer service"]);
+  });
+  it("never targets a duty the posting does not name, or one the line already says", () => {
+    expect(dutyTargets("Shelve books.", "Debugged laptops")).toEqual([]);
+    expect(dutyTargets(helpdesk, "Gave technical support and troubleshooting to students who debugged code")).toEqual([]);
   });
 });

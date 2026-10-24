@@ -150,15 +150,16 @@ export const generateBulletAlternatives = (input: Omit<BulletEditInput, "op">) =
 // ───────────────────────── summary ─────────────────────────
 
 /** A professional summary written ONLY from facts already in the resume (its digest). */
-export async function generateSummary(input: { doc: ResumeDoc; keywords?: string[] }): Promise<Proposal> {
+export async function generateSummary(input: { doc: ResumeDoc; keywords?: string[]; role?: { title: string; duties: string[] } }): Promise<Proposal> {
   if (!isAiConfigured()) throw new AiNotConfiguredError();
   const digest = factDigest(input.doc);
   const existing = input.doc.sections.find((s) => s.kind === "summary")?.lines[0]?.text ?? "";
   const keywords = (input.keywords ?? []).slice(0, 10);
-  const user = `<facts>\n${digest}\n</facts>${keywords.length ? `\n<target_keywords>${keywords.join(", ")}</target_keywords>` : ""}`;
+  const role = input.role ? `\n<role>${input.role.title}${input.role.duties.length ? ` (needs: ${input.role.duties.join(", ")})` : ""}</role>` : "";
+  const user = `<facts>\n${digest}\n</facts>${keywords.length ? `\n<target_keywords>${keywords.join(", ")}</target_keywords>` : ""}${role}`;
   const raw = await cached({ op: "summary", user }, () => structured({ task: "resume_rewrite",
     schema: EditOut, maxTokens: 700,
-    system: `${RULES}\n\nTASK: Write a professional summary for a student/new-grad resume: 2 sentences, at most 55 words, built ONLY from <facts>. No numbers unless they appear in <facts>. Do not state years of experience. No "passionate", "motivated", "results-driven". Only mention <target_keywords> that <facts> already support. Give 3 options.\n${SHAPE}`,
+    system: `${RULES}\n\nTASK: Write a professional summary for a student/new-grad resume: 2 sentences, at most 55 words, built ONLY from <facts>. No numbers unless they appear in <facts>. Do not state years of experience. No "passionate", "motivated", "results-driven". Only mention <target_keywords> that <facts> already support. If <role> is given, lead with the facts that matter most for that kind of work (for a help desk: helping people with technical problems; for a front desk: working with the public), but do not name the role, the employer or any duty the facts do not show. Start with what the student does or studies, never with "Served as", "Passionate" or "Dedicated". Give 3 options.\n${SHAPE}`,
     user,
   }));
   const { suggestions, rejected } = screenSuggestions(raw.suggestions, { original: existing, evidence: digest, kind: "summary", max: 3 });

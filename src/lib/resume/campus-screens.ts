@@ -103,3 +103,23 @@ export function campusScreens(jobText: string, profileText: string): Screen[] {
 /** Profile keywords worth surfacing for this job: the screens the profile already covers (never ones it lacks). */
 export const coveredKeywords = (screens: Screen[]) =>
   screens.filter((s) => s.covered === "yes").flatMap((s) => (s.id === "software" ? [s.label] : s.id === "language" && s.evidence ? s.evidence.split(", ") : s.id === "customer_service" ? ["customer service"] : []));
+
+/**
+ * Desk-job duties a posting names, and what a resume line must already SAY for the duty to describe it truthfully.
+ * "Helped students debug Java assignments" is technical support; "Greeted visitors" is customer service. A duty is a
+ * rewrite target only for a line whose own words match its meaning, so the rewrite renames real work, never invents it.
+ */
+const DUTIES: [term: string, jd: RegExp, line: RegExp][] = [
+  ["technical support", /\b(?:technical support|tech support|help ?desk|troubleshoot\w*|first-level support)\b/i, /\b(?:debug\w*|troubleshoot\w*|fix(?:ed|ing)?|set ?up|install\w*|configur\w*|help(?:ed)? \w+ (?:with )?(?:their )?(?:computers?|laptops?|devices?|software|code|assignments?)|support(?:ed)? (?:students|users|staff))\b/i],
+  ["troubleshooting", /\btroubleshoot\w*\b/i, /\b(?:debug\w*|diagnos\w*|fix(?:ed|ing)?|resolv\w*)\b/i],
+  ["customer service", /\b(?:customer service|customers?|patrons?|front counter|front desk|visitors?)\b/i, /\b(?:greet\w*|assist\w* (?:customers|visitors|patrons|guests|students)|answer\w* (?:questions|calls|phones?)|help(?:ed)? (?:customers|visitors|patrons|students)|serv(?:ed|ing) (?:customers|guests))\b/i],
+  ["data entry", /\bdata entry|enter(?:ing)? data\b/i, /\b(?:enter(?:ed|ing)? (?:data|records|information)|updat(?:ed|ing) (?:records|spreadsheets?|databases?)|spreadsheets?|record(?:ed|ing) (?:data|information))\b/i],
+  ["scheduling", /\bschedul\w+|appointments?\b/i, /\b(?:schedul\w+|book(?:ed|ing) (?:appointments|rooms)|calendars?|appointments?)\b/i],
+  ["record keeping", /\b(?:records?|documentation|filing)\b/i, /\b(?:fil(?:ed|ing)|record(?:ed|s)|document(?:ed|ing)|log(?:ged|ging)|track(?:ed|ing))\b/i],
+  ["cash handling", /\bcash|payments?|register\b/i, /\b(?:cash|register|payments?|transactions?)\b/i],
+];
+
+/** The posting's duties that this resume line truthfully describes but does not yet name. */
+export function dutyTargets(jobText: string, line: string): string[] {
+  return DUTIES.filter(([term, jd, ln]) => jd.test(jobText) && ln.test(line) && !new RegExp(`\\b${term}\\b`, "i").test(line)).map(([term]) => term);
+}

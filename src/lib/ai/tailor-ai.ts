@@ -13,6 +13,7 @@
  */
 import "server-only";
 import { allLines, applySuggestion, basisOf, evidenceLines, findWeakBullets, lineContext, type Proposal, type Target } from "@/lib/resume/edits";
+import { dutyTargets } from "@/lib/resume/campus-screens";
 import { hasTerm } from "@/lib/resume/guard";
 import type { CandidateItem, ResumeDoc } from "@/lib/resume/types";
 import { lintWriting, type WritingKind } from "@/lib/writing/style";
@@ -30,13 +31,10 @@ const evidenceOfItem = (item: CandidateItem) => [...evidenceLines(item.data), it
 export const cleanRewrite = (text: string, kind: WritingKind, evidence: string) =>
   !lintWriting(text, kind, evidence).some((i) => i.severity === "error" || ["ai_tell", "dash", "duty", "cliche", "first_person", "exclamation"].includes(i.code));
 
-/** The safest suggestion that adds nothing and reads clean, or null. */
-export function pickRewrite(p: Proposal, kind: WritingKind): string | null {
-  for (const s of p.suggestions) {
-    if (s.riskLevel !== "none" || s.requiresConfirmation) continue;
-    if (cleanRewrite(s.text, kind, p.basis)) return s.text;
-  }
-  return null;
+/** A suggestion that adds nothing and reads clean, preferring one that uses a target term; or null. */
+export function pickRewrite(p: Proposal, kind: WritingKind, prefer: string[] = []): string | null {
+  const ok = p.suggestions.filter((s) => s.riskLevel === "none" && !s.requiresConfirmation && cleanRewrite(s.text, kind, p.basis)).map((s) => s.text);
+  return ok.find((t) => prefer.some((k) => hasTerm(t, k))) ?? ok[0] ?? null;
 }
 
 async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
@@ -53,7 +51,7 @@ async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
 export type LineCandidate = { target: Extract<Target, { kind: "line" }>; where: string; before: string; evidence: string; op: "ats" | "improve"; keywords: string[]; score: number; entryId: string };
 
 /** Which lines to rewrite, best first: supported-but-unsaid job keywords count double, a weak opening counts once. Three per entry at most. */
-export function chooseLines(doc: ResumeDoc, keywords: string[], items: Map<string, CandidateItem>, max: number): LineCandidate[] {
+export function chooseLines(doc: ResumeDoc, keywords: string[], items: Map<string, CandidateItem>, max: number, jobText = ""): LineCandidate[] {
   const weak = new Set(findWeakBullets(doc).filter((f) => f.severity === "weak").map((f) => f.ref.lineId));
   const out: LineCandidate[] = [];
   for (const { ref, line, section, entry } of allLines(doc)) {
@@ -63,7 +61,8 @@ export function chooseLines(doc: ResumeDoc, keywords: string[], items: Map<strin
     const item = items.get(line.sourceItemId ?? entry.sourceItemId ?? "");
     const evidence = [basisOf(ctx), item ? evidenceOfItem(item) : ""].filter(Boolean).join("\n");
     // A keyword is a target only when this line's own evidence supports it and the line does not already say it.
-    const supported = keywords.filter((k) => hasTerm(evidence, k) && !hasTerm(line.text, k));
+    // A posting duty is a target only when THIS line's own words describe that work (campus-screens.ts dutyTargets).
+    const supported = [...new Set([...keywords.filter((k) => hasTerm(evidence, k) && !hasTerm(line.text, k)), ...dutyTargets(jobText, line.text)])];
     const score = supported.length * 2 + (weak.has(line.id) ? 1 : 0);
     if (!score) continue;
     out.push({ target: { kind: "line", ...ref }, where: `${section.title} · ${entry.heading || "entry"}`, before: line.text, evidence, op: supported.length ? "ats" : "improve", keywords: supported.length ? supported : keywords, score, entryId: entry.id });
@@ -78,13 +77,13 @@ export function chooseLines(doc: ResumeDoc, keywords: string[], items: Map<strin
   }).slice(0, max);
 }
 
-export async function aiTailor(doc: ResumeDoc, o: { userId: string; keywords: string[]; items: CandidateItem[]; maxLines?: number; timeoutMs?: number }): Promise<AiTailorResult> {
+export async function aiTailor(doc: ResumeDoc, o: { userId: string; keywords: string[]; items: CandidateItem[]; maxLines?: number; timeoutMs?: number; job?: { title: string; text: string } }): Promise<AiTailorResult> {
   if (!isAiConfigured()) return { doc, changes: [], note: "AI isn't configured, so the tailored resume uses your own wording." };
   if (!signingAvailable()) return { doc, changes: [], note: "AI rewriting is off: the server has no signing secret." };
   const items = new Map(o.items.map((i) => [i.id, i]));
   const keywords = o.keywords.slice(0, 15);
   const timeout = o.timeoutMs ?? 20_000;
-  const picks = chooseLines(doc, keywords, items, o.maxLines ?? 6);
+  const picks = chooseLines(doc, keywords, items, o.maxLines ?? 6, o.job?.text ?? "");
 
   // At most three model calls at a time; each is bounded, and a slow or failed call just leaves that line as it was.
   const results: (Proposal | null)[] = new Array(picks.length).fill(null);
@@ -97,13 +96,13 @@ export async function aiTailor(doc: ResumeDoc, o: { userId: string; keywords: st
       if (ctx) results[i] = await withTimeout(generateResumeEdit({ op: c.op, target: c.target, ctx, evidence: c.evidence, keywords: c.keywords }), timeout);
     }
   }));
-  const [, summaryP] = await Promise.all([lines, withTimeout(generateSummary({ doc, keywords }), timeout)]);
+  const [, summaryP] = await Promise.all([lines, withTimeout(generateSummary({ doc, keywords, role: o.job ? { title: o.job.title, duties: [...new Set(picks.flatMap((p) => p.keywords))] } : undefined }), timeout)]);
 
   let out = doc;
   const changes: AiTailorChange[] = [];
   picks.forEach((c, i) => {
     const p = results[i];
-    const text = p ? pickRewrite(p, "bullet") : null;
+    const text = p ? pickRewrite(p, "bullet", c.op === "ats" ? c.keywords : []) : null;
     if (!p || !text) return;
     const basis = p.basis.slice(0, 6000);
     out = applySuggestion(out, c.target, text, { op: c.op, basis, sig: signAiText(o.userId, text, basis) });

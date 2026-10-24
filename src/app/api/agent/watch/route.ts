@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { errorResponse, ok } from "@/lib/api";
 import { runDiscovery } from "@/lib/discovery/agent";
+import { backfill } from "@/lib/hunter/link";
 import { enqueue, processQueue } from "@/lib/hunter/pipeline";
 import { sha256 } from "@/lib/hunter/tokens";
 import { createSupabaseAdmin } from "@/lib/supabase/server";
@@ -35,7 +36,10 @@ export async function GET(req: Request) {
     const db = createSupabaseAdmin();
     if (!(await authorized(req, db))) return Response.json({ error: "Unauthorized" }, { status: 401 });
     const { newJobIds, runId, created, failures, companies } = await runDiscovery(db, { trigger: "cron", onlySjsu: true });
-    const queued = await enqueue(db, newJobIds);
+    let queued = await enqueue(db, newJobIds);
+    // Catch-up: any open desk job a linked student has never been sent (reclassified as desk, or missed earlier). Idempotent.
+    const { data: links } = await db.from("hunter_links").select("user_id").eq("enabled", true).not("telegram_chat_id", "is", null);
+    for (const l of links ?? []) queued += await backfill(db, l.user_id as string);
     // Leave headroom under maxDuration; anything unfinished is picked up by the next tick.
     // One item can take ~70s (AI tailoring + research), so the last one may start no later than ~200s in.
     const hunter = await processQueue(db, { deadline: started + 200_000 });

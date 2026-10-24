@@ -109,3 +109,19 @@ describe("editor: humanize and human-first ordering", () => {
     expect(p.suggestions[0].text).toBe("Greeted visitors and answered their questions at the front desk");
   });
 });
+
+describe("pickRewrite", () => {
+  const base = { id: "p", op: "ats" as const, target: { kind: "summary" as const }, original: "x", basis: "Helped students debug code", missingEvidence: [], rejected: [], via: "ai" as const };
+  const sug = (text: string, riskLevel: "none" | "medium" = "none") => ({ id: text, text, reason: "", newFacts: [], requiresUserConfirmation: riskLevel !== "none", requiresConfirmation: riskLevel !== "none", newClaims: [], riskLevel, evidence: [] });
+  it("prefers a clean, safe option that uses a target term", async () => {
+    const { pickRewrite } = await import("./tailor-ai");
+    const p = { ...base, suggestions: [sug("Assisted students with debugging code"), sug("Provided technical support to students debugging code")] };
+    expect(pickRewrite(p, "bullet", ["technical support"])).toBe("Provided technical support to students debugging code");
+    expect(pickRewrite(p, "bullet")).toBe("Assisted students with debugging code");
+  });
+  it("never picks a risky or AI-sounding option, even if it uses the term", async () => {
+    const { pickRewrite } = await import("./tailor-ai");
+    const p = { ...base, suggestions: [sug("Led technical support for students", "medium"), sug("Utilized technical support skills to help students"), sug("Helped students debug code in lab")] };
+    expect(pickRewrite(p, "bullet", ["technical support"])).toBe("Helped students debug code in lab");
+  });
+});

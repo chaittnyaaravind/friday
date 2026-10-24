@@ -10,7 +10,7 @@ import { campusEmployerOf } from "@/lib/domain/campus";
 import { parseHours } from "@/lib/domain/hours";
 import { parsePay } from "@/lib/domain/normalize";
 import { REGISTRY } from "./registry";
-import { ADAPTERS, applicationWindow, isCampusTitle, parseRecruitmentPage, parseWindowPage, SourceError, STUDENT_TITLE, usable, type CompanyFeed } from "./sources";
+import { acrobatPdfUrl, ADAPTERS, adpStudentPosting, applicationWindow, isCampusTitle, mapAdpRequisition, parseRecruitmentPage, parseWindowPage, SourceError, STUDENT_TITLE, usable, type CompanyFeed } from "./sources";
 
 const dir = new URL("../../../test/fixtures/sources/", import.meta.url);
 const json = <T>(file: string): T => JSON.parse(readFileSync(new URL(file, dir), "utf8")) as T;
@@ -606,5 +606,50 @@ describe("sjsu_page window mode (live University Housing page)", () => {
   it("a configured role the page no longer names is not emitted", () => {
     const out = parseWindowPage(housingHtml, feed("sjsu_page", "SJSU University Housing Services", { url, mode: "window", roles: "Community Desk Assistant (CDA/ECDA)|Night Owl Monitor" }), at("2026-11-03T18:00:00Z"));
     expect(out.map((p) => p.title)).toEqual(["Community Desk Assistant (CDA/ECDA)"]);
+  });
+});
+
+// ───────────────────────── ADP career center (Associated Students) ─────────────────────────
+describe("ADP career center (live Associated Students data, 2026-10-24)", () => {
+  const list = JSON.parse(html("adp-as-list.json")) as { jobRequisitions: { itemID: string; requisitionTitle: string }[] };
+  const clerk = JSON.parse(html("adp-as-counter-clerk.json"));
+  const teacher = JSON.parse(html("adp-as-head-teacher.json"));
+  const as = feed("sjsu_page", "SJSU Associated Students", { url: "https://www.sjsu.edu/as/jobs/index.php", department: "Associated Students", adpCid: "1f21e958-d199-4456-afb9-29fa26ef70be", adpCcId: "19000101_000001" });
+
+  it("a student posting keeps its full description, stated pay, department and the AS apply link", () => {
+    const base = list.jobRequisitions.find((r) => r.itemID === "9201199030613_1")!;
+    const p = mapAdpRequisition({ ...base, ...clerk }, as)!;
+    expect(p.title).toBe("Counter Clerk");
+    expect(p.payText).toBe("$18.45 per hour");
+    expect(p.department).toBe("A.S. Print Shop");
+    expect(p.description.length).toBeGreaterThan(2000);
+    expect(p.applyUrl).toContain("jobId=596163");
+    expect(p.onCampus).toBe(true);
+  });
+  it("a staff posting is not kept", () => {
+    const base = list.jobRequisitions.find((r) => r.itemID === "9201096844127_1")!;
+    expect(mapAdpRequisition({ ...base, ...teacher }, as)).toBeNull();
+  });
+  it("a posting is a student one if ADP's Full/Part-Time line says Student, or the title is a student title", () => {
+    expect(adpStudentPosting("Office Assistant", "Full/Part-Time: Part-Time, Student\nCompensation: $18")).toBe(true);
+    expect(adpStudentPosting("Head Teacher, Preschool", "Full/Part-Time: Full-Time\n")).toBe(false);
+    expect(adpStudentPosting("Student Assistant Teacher, Pre-K", "Full/Part-Time: Part-Time\n")).toBe(true); // a student title is enough
+    expect(adpStudentPosting("Office Assistant", "no such line")).toBe(true);
+  });
+  it("the adapter reads the list, then each requisition's detail", async () => {
+    stubFetch((url) => (url.includes("9201199030613_1") ? clerk : url.includes("/job-requisitions/") ? teacher : url.includes("/job-requisitions?") ? list : undefined));
+    const out = await run("sjsu_page", as);
+    expect(out.map((p) => p.title)).toEqual(["Counter Clerk"]);
+  }, 30_000);
+});
+
+describe("Acrobat share pages (King Library job descriptions)", () => {
+  // The shape seen on a live share page (2026-10-24): JSON in the page with a signed download_url on Adobe storage.
+  const page = `<script>window.__s={"name":"2026 Student Assistant Job Opportunity - IT Help Desk.pdf","api_key=dc_sendtrack","download_url":"https://acp-aep-cs-blobstore-prod-va6-data.adobe.io/a93a86b5-edd6?response-content-disposition=attachment&response-content-type=application%2Fpdf&X-Amz-Expires=14400&X-Amz-Signature=abc"}</script>
+  <a href="https://evil.adobe.io.example.com/x.pdf">x</a>`;
+  it("finds the signed PDF link on Adobe storage, and nothing else", () => {
+    expect(acrobatPdfUrl(page)).toBe("https://acp-aep-cs-blobstore-prod-va6-data.adobe.io/a93a86b5-edd6?response-content-disposition=attachment&response-content-type=application%2Fpdf&X-Amz-Expires=14400&X-Amz-Signature=abc");
+    expect(acrobatPdfUrl('<a href="https://acp-aep-cs-blobstore-prod-va6-data.adobe.io.evil.com/a?response-content-type=application%2Fpdf">')).toBeNull();
+    expect(acrobatPdfUrl("<p>no link</p>")).toBeNull();
   });
 });

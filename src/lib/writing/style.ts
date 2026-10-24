@@ -69,7 +69,7 @@ const CLICHES: [RegExp, string][] = [
 ];
 
 // AI tells (humanizer / anti-ai-slop-writing skills, Wikipedia "Signs of AI writing"). Each is a warning, never an error.
-const AI_WORDS = /\b(?:delv(?:e|es|ed|ing)|tapestry|testament|pivotal|crucial|vibrant|intricate|intricacies|meticulous(?:ly)?|seamless(?:ly)?|bolster(?:ed|ing)?|garner(?:ed|ing)?|foster(?:ed|ing)?|underscor(?:e|es|ed|ing)|showcas(?:e|es|ed|ing)|multifaceted|utiliz(?:e|ed|es|ing)|facilitat(?:e|ed|es|ing)|commenc(?:e|ed|ing)|endeavou?rs?|transformative|groundbreaking|game[- ]chang(?:ing|er)|paramount|realm|landscape of|interplay|navigat(?:e|ed|ing) the)\b/i;
+const AI_WORDS = /\b(?:delv(?:e|es|ed|ing)|tapestry|testament|pivotal|crucial|vibrant|intricate|intricacies|meticulous(?:ly)?|seamless(?:ly)?|bolster(?:ed|ing)?|garner(?:ed|ing)?|foster(?:ed|ing)?|underscor(?:e|es|ed|ing)|showcas(?:e|es|ed|ing)|multifaceted|utiliz(?:e|ed|es|ing)|facilitat(?:e|ed|es|ing)|commenc(?:e|ed|ing)|endeavou?rs?|transformative|groundbreaking|game[- ]chang(?:ing|er)|paramount|realm|landscape of|interplay|navigat(?:e|ed|ing) the|serv(?:es|ed|ing) as|stands? as|boasts?)\b/i;
 const NOT_X_BUT_Y = /\bnot (?:just|only|merely|simply)\b[^.]{0,80}\b(?:but|it'?s)\b|\bit'?s not (?:about )?[^.]{1,60}[,;]\s*it'?s\b/i;
 const RIDER = /,\s*(?:ensuring|highlighting|showcasing|underscoring|demonstrating|reflecting|emphasizing|fostering|contributing to)\b/i;
 const STOCK_OPENER = /(?:^|[.!?]\s+|\n)(?:Additionally|Moreover|Furthermore|Notably|Indeed|Importantly|Interestingly|Overall|In conclusion),/;

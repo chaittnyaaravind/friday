@@ -9,7 +9,6 @@ import { enqueue } from "./pipeline";
 
 const CODE_TTL_MS = 15 * 60_000;
 /** On linking, the student also gets the desk jobs already open from the last two weeks (at most this many). */
-const BACKFILL_DAYS = 14;
 const BACKFILL_MAX = 10;
 
 export async function newLinkCode(db: SupabaseClient, userId: string): Promise<string> {
@@ -32,10 +31,12 @@ export async function redeemLinkCode(db: SupabaseClient, code: string, chatId: n
   return data.user_id as string;
 }
 
-/** The campus desk jobs already open (found in the last two weeks), so linking is useful on day one. */
+/** The campus desk jobs already open, so linking is useful on day one. Idempotent (one item per student and job, ever). */
 export async function backfill(db: SupabaseClient, userId: string): Promise<number> {
-  const since = new Date(Date.now() - BACKFILL_DAYS * 86_400_000).toISOString();
-  const { data } = await db.from("jobs").select("id, campus_roles, physical_demand").eq("status", "active").eq("is_on_campus", true).is("excluded_reason", null).is("imported_by", null).gte("discovered_at", since).order("discovered_at", { ascending: false }).limit(60);
+  // Every campus job still open to apply (no deadline, or one today or later), newest first. Not only recent ones:
+  // a desk job posted a month ago and still open is exactly what a newly linked student wants to see.
+  const today = new Date().toISOString().slice(0, 10);
+  const { data } = await db.from("jobs").select("id, campus_roles, physical_demand").eq("status", "active").eq("is_on_campus", true).is("excluded_reason", null).is("imported_by", null).or(`deadline.is.null,deadline.gte.${today}`).order("discovered_at", { ascending: false }).limit(60);
   const profile = await loadMatchProfile(db, userId);
   const ids = (data ?? []).filter((j) => !profile?.campusPrefs.deskOnly || isDeskJob(j.campus_roles as string[] | null, j.physical_demand as string | null)).slice(0, BACKFILL_MAX).map((j) => j.id as string);
   return enqueue(db, ids, { userId });
