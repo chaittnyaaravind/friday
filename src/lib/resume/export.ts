@@ -6,7 +6,7 @@
  */
 import { AlignmentType, BorderStyle, Document, Packer, Paragraph, TabStopType, TextRun } from "docx";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
-import { templateById, type TemplateId } from "./templates";
+import { templateById, type TemplateId, type TemplateSpec } from "./templates";
 import type { ResumeDoc } from "./types";
 
 // ───────────────────────── PDF ─────────────────────────
@@ -16,8 +16,34 @@ const INK = rgb(0.08, 0.08, 0.08);
 const SOFT = rgb(0.32, 0.32, 0.32);
 const FAINT = rgb(0.72, 0.72, 0.72);
 
+/** Spacing and type scaled by `k` (fonts, leading, gaps, margins); tracking and color unchanged. */
+function scaled(T: TemplateSpec, k: number): TemplateSpec {
+  const m = <O extends Record<string, unknown>>(o: O, skip: string[] = []) =>
+    Object.fromEntries(Object.entries(o).map(([key, v]) => [key, typeof v === "number" && !skip.includes(key) ? v * k : v])) as O;
+  return { ...T, margin: m(T.margin), header: m(T.header), section: m(T.section, ["tracking"]), entry: m(T.entry), body: m(T.body), sectionGap: T.sectionGap * k };
+}
+
+/** Tighter scales tried, in order, when a resume barely runs past one page. 0.92 keeps body text at 9.2pt or more. */
+const FIT_SCALES = [1, 0.96, 0.92];
+
+/**
+ * A one-page resume is what campus and entry-level screeners expect. When the document runs a little past one page,
+ * it is re-laid out with slightly tighter type and spacing (never below FIT_SCALES' floor); if it still does not fit,
+ * it is returned at the template's own size across as many pages as it needs. Words are never cut.
+ */
 export async function renderPdf(doc: ResumeDoc, template: TemplateId = "classic"): Promise<Uint8Array> {
   const T = templateById(template);
+  let first: Uint8Array | null = null;
+  for (const k of FIT_SCALES) {
+    const { bytes, pages } = await layoutPdf(doc, k === 1 ? T : scaled(T, k));
+    first ??= bytes;
+    if (pages === 1) return bytes;
+  }
+  return first!;
+}
+
+/** One layout pass at exactly these sizes (exported for tests). */
+export async function layoutPdf(doc: ResumeDoc, T: TemplateSpec): Promise<{ bytes: Uint8Array; pages: number }> {
   const M = T.margin;
   const pdf = await PDFDocument.create();
   // Deterministic, honest metadata only.
@@ -90,7 +116,8 @@ export async function renderPdf(doc: ResumeDoc, template: TemplateId = "classic"
   y -= 6;
 
   for (const s of doc.sections) {
-    need(30);
+    // Keep the heading with what follows it: room for the heading plus the first entry's title and bullet, or first line.
+    need(T.section.before + T.section.after + (s.entries.length ? T.entry.lead + T.body.lead : T.body.lead));
     y -= T.section.before;
     const title = s.title.toUpperCase();
     draw(title, M.x, T.section.size, T.section.style === "plain" ? reg : bold, T.section.style === "accent" ? accent : T.section.style === "plain" ? SOFT : INK);
@@ -135,7 +162,7 @@ export async function renderPdf(doc: ResumeDoc, template: TemplateId = "classic"
     }
     y -= T.sectionGap;
   }
-  return pdf.save();
+  return { bytes: await pdf.save(), pages: pdf.getPageCount() };
 }
 
 // ───────────────────────── DOCX ─────────────────────────

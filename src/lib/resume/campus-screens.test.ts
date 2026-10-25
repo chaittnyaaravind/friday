@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { campusScreens, coveredKeywords, dutyTargets } from "./campus-screens";
+import { campusScreens, coveredKeywords, dutyTargets, jobRelevance, supportedDuties } from "./campus-screens";
 
 // Modeled on real SJSU postings read by FRIDAY (Parking Services Office Student Assistant, King Library IT Helpdesk).
 const parkingOffice = `Parking Services Office Student Assistant. Assist customers at the front counter, answer phones and questions,
@@ -53,5 +53,20 @@ describe("dutyTargets", () => {
   it("never targets a duty the posting does not name, or one the line already says", () => {
     expect(dutyTargets("Shelve books.", "Debugged laptops")).toEqual([]);
     expect(dutyTargets(helpdesk, "Gave technical support and troubleshooting to students who debugged code")).toEqual([]);
+  });
+});
+
+describe("supportedDuties / jobRelevance", () => {
+  const helpdesk = "Provide first-level technical support and troubleshooting for library patrons and staff.";
+  it("lists only posting duties the profile shows, named or described", () => {
+    expect(supportedDuties(helpdesk, "Troubleshoots app and network problems from logs and diagnostics")).toEqual(["technical support", "troubleshooting"]);
+    expect(supportedDuties(helpdesk, "Built a REST API in Node.js")).toEqual([]);
+    expect(supportedDuties("Shelve books.", "Debugged laptops")).toEqual([]);
+  });
+  it("scores an on-target line above an off-target one for the same job", () => {
+    const onTarget = "Computer Science student who troubleshoots app and network problems from logs and diagnostics";
+    const offTarget = "Computer Science student who built a peer-to-peer file transfer app using WebRTC";
+    expect(jobRelevance(onTarget, helpdesk, [])).toBeGreaterThan(jobRelevance(offTarget, helpdesk, []));
+    expect(jobRelevance("Wrote React components", "Front desk role. React a plus.", ["React"])).toBe(1);
   });
 });

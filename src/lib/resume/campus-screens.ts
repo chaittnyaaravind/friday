@@ -123,3 +123,18 @@ const DUTIES: [term: string, jd: RegExp, line: RegExp][] = [
 export function dutyTargets(jobText: string, line: string): string[] {
   return DUTIES.filter(([term, jd, ln]) => jd.test(jobText) && ln.test(line) && !new RegExp(`\\b${term}\\b`, "i").test(line)).map(([term]) => term);
 }
+
+const showsDuty = (term: string, ln: RegExp, text: string) => ln.test(text) || new RegExp(`\\b${term}\\b`, "i").test(text);
+
+/** The posting's duties that the profile (as text) shows somewhere, named or described. What a summary may lead with. */
+export function supportedDuties(jobText: string, profileText: string): string[] {
+  return DUTIES.filter(([term, jd, ln]) => jd.test(jobText) && showsDuty(term, ln, profileText)).map(([term]) => term);
+}
+
+/**
+ * How much of this job a line speaks to: the posting duties it names or describes, plus the job keywords it says.
+ * A rewrite must not score lower than the line it replaces; fact-checked but off-target is still worse.
+ */
+export function jobRelevance(text: string, jobText: string, keywords: string[]): number {
+  return DUTIES.filter(([term, jd, ln]) => jd.test(jobText) && showsDuty(term, ln, text)).length + keywords.filter((k) => hasTerm(text, k)).length;
+}

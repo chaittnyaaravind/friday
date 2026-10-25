@@ -4,7 +4,7 @@
  * missing requirements are shown as "not found in profile" and never added.
  */
 import { extractSkills, resolveSkill, skillBySlug } from "@/lib/domain/skills";
-import { campusScreens, coveredKeywords, type Screen } from "./campus-screens";
+import { campusScreens, coveredKeywords, jobRelevance, type Screen } from "./campus-screens";
 import { evidenceLines } from "./edits";
 import { buildResume, normalizeSentence, type BuildOptions } from "./generate";
 import { isEligible, SECTION_LABEL, type CandidateItem, type ExperienceData, type ProjectData, type ResumeDoc, type SkillData, type TextData } from "./types";
@@ -36,6 +36,7 @@ const words = (s: string) => s.toLowerCase().split(/[^a-z0-9+#]+/).filter((w) =>
 export function tailorProposal(allItems: CandidateItem[], job: TailorJob): TailorProposal {
   const items = allItems.filter(isEligible);
   const jobSlugs = new Set<string>([...job.requirements.map((r) => resolveSkill(r)).filter(Boolean) as string[], ...extractSkills(job.description)]);
+  const jobText = [job.title, job.description, ...job.requirements].join("\n");
   const jobWords = new Set([...words(job.title), ...words(job.requirements.join(" "))]);
 
   // Skills: job requirement vs the user's own confirmed skills. Never the other way round.
@@ -57,7 +58,9 @@ export function tailorProposal(allItems: CandidateItem[], job: TailorJob): Tailo
   const rankOf = (text: string) => {
     const matches = extractSkills(text).filter((s) => jobSlugs.has(s)).map((s) => skillBySlug(s)?.name ?? s);
     const overlap = words(text).filter((w) => jobWords.has(w));
-    return { score: matches.length * 2 + new Set(overlap).size, matches };
+    // A posting duty the entry shows (troubleshooting for a help desk, greeting visitors for a front desk) counts like a skill:
+    // for campus desk jobs it is usually what the posting is about.
+    return { score: matches.length * 2 + new Set(overlap).size + jobRelevance(text, jobText, []) * 2, matches };
   };
   const entryText = (i: CandidateItem) => {
     const d = i.data as ExperienceData & ProjectData;
@@ -100,7 +103,6 @@ export function tailorProposal(allItems: CandidateItem[], job: TailorJob): Tailo
     .filter((s) => s.status === "not_in_profile")
     .map((s) => (s.mentionedIn ? `${s.name} is required — it's mentioned in your ${s.mentionedIn}, but isn't a confirmed skill` : `${s.name} appears in the job requirements but is not in your profile`));
 
-  const jobText = [job.title, job.description, ...job.requirements].join("\n");
   const screens = campusScreens(jobText, items.flatMap((i) => evidenceLines(i.data)).join("\n"));
   const keywords = [...new Set([...skills.filter((s) => s.status === "confirmed").map((s) => s.name), ...coveredKeywords(screens)])].slice(0, 15);
 

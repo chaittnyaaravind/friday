@@ -82,7 +82,8 @@ export function buildResume(allItems: CandidateItem[], opts: BuildOptions = {}):
   const mk = (kind: DocSectionKind): DocSection => ({ id: randomId(), kind, title: TITLE[kind], entries: [], lines: [] });
 
   const summary = of<TextData>("summary");
-  if (summary.length) sections.summary = { ...mk("summary"), lines: summary.map((s) => line(normalizeSentence(s.data.text), s.id)) };
+  // A summary is prose: unlike bullets, it keeps its closing period.
+  if (summary.length) sections.summary = { ...mk("summary"), lines: summary.map((s) => line(normalizeSentence(s.data.text).replace(/(?<![.!?])$/, "."), s.id)) };
 
   const edu = of<EducationData>("education");
   if (edu.length) {

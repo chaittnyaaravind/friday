@@ -124,4 +124,10 @@ describe("pickRewrite", () => {
     const p = { ...base, suggestions: [sug("Led technical support for students", "medium"), sug("Utilized technical support skills to help students"), sug("Helped students debug code in lab")] };
     expect(pickRewrite(p, "bullet", ["technical support"])).toBe("Helped students debug code in lab");
   });
+  it("skips options that fail the caller's keep test (e.g. less relevant to the job)", async () => {
+    const { pickRewrite } = await import("./tailor-ai");
+    const p = { ...base, suggestions: [sug("Built a file transfer app"), sug("Helped students debug code")] };
+    expect(pickRewrite(p, "bullet", [], (t) => /debug/.test(t))).toBe("Helped students debug code");
+    expect(pickRewrite(p, "bullet", [], () => false)).toBeNull();
+  });
 });

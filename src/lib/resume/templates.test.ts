@@ -1,7 +1,8 @@
 import mammoth from "mammoth";
 import { extractText } from "unpdf";
 import { describe, expect, it } from "vitest";
-import { renderDocx, renderPdf } from "./export";
+import { PDFDocument } from "pdf-lib";
+import { layoutPdf, renderDocx, renderPdf } from "./export";
 import { DEFAULT_TEMPLATE, isTemplateId, templateById, TEMPLATES } from "./templates";
 import type { ResumeDoc } from "./types";
 
@@ -55,5 +56,28 @@ describe("templates", () => {
     await renderPdf(doc, "student");
     await renderDocx(doc, "minimal");
     expect(JSON.stringify(doc)).toBe(before);
+  });
+});
+
+describe("one-page fit", () => {
+  const withBullets = (n: number): ResumeDoc => ({
+    ...doc,
+    sections: [...doc.sections, { id: "prj", kind: "projects", title: "Projects", lines: [], entries: [{ id: "p1", sourceItemId: null, heading: "Project", subheading: "TypeScript", meta: "2026", origin: "user", bullets: Array.from({ length: n }, (_, i) => line(`p${i}`, `Built feature number ${i} of a browser app that sends files directly between two devices over WebRTC`)) }] }],
+  });
+  const pages = async (bytes: Uint8Array) => (await PDFDocument.load(bytes)).getPageCount();
+
+  it("tightens a resume that barely runs over onto one page, keeping every word", async () => {
+    const T = templateById("classic");
+    let n = 10;
+    while ((await layoutPdf(withBullets(n), T)).pages === 1) n++; // the first length that overflows at the template's own size
+    const bytes = await renderPdf(withBullets(n));
+    expect(await pages(bytes)).toBe(1);
+    expect(words((await extractText(bytes, { mergePages: true })).text)).toContain(`feature number ${n - 1} of`);
+  });
+
+  it("never shrinks past the floor: a long resume keeps the template's size across pages", async () => {
+    const bytes = await renderPdf(withBullets(80));
+    expect(await pages(bytes)).toBeGreaterThan(1);
+    expect(await pages(bytes)).toBe((await layoutPdf(withBullets(80), templateById("classic"))).pages);
   });
 });

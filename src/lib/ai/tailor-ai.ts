@@ -13,7 +13,8 @@
  */
 import "server-only";
 import { allLines, applySuggestion, basisOf, evidenceLines, findWeakBullets, lineContext, type Proposal, type Target } from "@/lib/resume/edits";
-import { dutyTargets } from "@/lib/resume/campus-screens";
+import { dutyTargets, jobRelevance, supportedDuties } from "@/lib/resume/campus-screens";
+import { docToText } from "@/lib/resume/generate";
 import { hasTerm } from "@/lib/resume/guard";
 import type { CandidateItem, ResumeDoc } from "@/lib/resume/types";
 import { lintWriting, type WritingKind } from "@/lib/writing/style";
@@ -31,9 +32,9 @@ const evidenceOfItem = (item: CandidateItem) => [...evidenceLines(item.data), it
 export const cleanRewrite = (text: string, kind: WritingKind, evidence: string) =>
   !lintWriting(text, kind, evidence).some((i) => i.severity === "error" || ["ai_tell", "dash", "duty", "cliche", "first_person", "exclamation"].includes(i.code));
 
-/** A suggestion that adds nothing and reads clean, preferring one that uses a target term; or null. */
-export function pickRewrite(p: Proposal, kind: WritingKind, prefer: string[] = []): string | null {
-  const ok = p.suggestions.filter((s) => s.riskLevel === "none" && !s.requiresConfirmation && cleanRewrite(s.text, kind, p.basis)).map((s) => s.text);
+/** A suggestion that adds nothing, reads clean and passes `keep`, preferring one that uses a target term; or null. */
+export function pickRewrite(p: Proposal, kind: WritingKind, prefer: string[] = [], keep: (text: string) => boolean = () => true): string | null {
+  const ok = p.suggestions.filter((s) => s.riskLevel === "none" && !s.requiresConfirmation && cleanRewrite(s.text, kind, p.basis) && keep(s.text)).map((s) => s.text);
   return ok.find((t) => prefer.some((k) => hasTerm(t, k))) ?? ok[0] ?? null;
 }
 
@@ -83,7 +84,12 @@ export async function aiTailor(doc: ResumeDoc, o: { userId: string; keywords: st
   const items = new Map(o.items.map((i) => [i.id, i]));
   const keywords = o.keywords.slice(0, 15);
   const timeout = o.timeoutMs ?? 20_000;
-  const picks = chooseLines(doc, keywords, items, o.maxLines ?? 6, o.job?.text ?? "");
+  const jobText = o.job?.text ?? "";
+  const picks = chooseLines(doc, keywords, items, o.maxLines ?? 6, jobText);
+  // Fact-checked but off-target is still worse: a rewrite may not speak to this job less than the line it replaces.
+  const noLessRelevant = (before: string) => (text: string) => !jobText || jobRelevance(text, jobText, keywords) >= jobRelevance(before, jobText, keywords);
+  const summaryBefore = doc.sections.find((s) => s.kind === "summary")?.lines[0]?.text ?? "";
+  const duties = [...new Set([...supportedDuties(jobText, docToText(doc)), ...picks.flatMap((p) => p.keywords)])];
 
   // At most three model calls at a time; each is bounded, and a slow or failed call just leaves that line as it was.
   const results: (Proposal | null)[] = new Array(picks.length).fill(null);
@@ -96,22 +102,22 @@ export async function aiTailor(doc: ResumeDoc, o: { userId: string; keywords: st
       if (ctx) results[i] = await withTimeout(generateResumeEdit({ op: c.op, target: c.target, ctx, evidence: c.evidence, keywords: c.keywords }), timeout);
     }
   }));
-  const [, summaryP] = await Promise.all([lines, withTimeout(generateSummary({ doc, keywords, role: o.job ? { title: o.job.title, duties: [...new Set(picks.flatMap((p) => p.keywords))] } : undefined }), timeout)]);
+  const [, summaryP] = await Promise.all([lines, withTimeout(generateSummary({ doc, keywords, role: o.job ? { title: o.job.title, duties } : undefined }), timeout)]);
 
   let out = doc;
   const changes: AiTailorChange[] = [];
   picks.forEach((c, i) => {
     const p = results[i];
-    const text = p ? pickRewrite(p, "bullet", c.op === "ats" ? c.keywords : []) : null;
+    const text = p ? pickRewrite(p, "bullet", c.op === "ats" ? c.keywords : [], noLessRelevant(c.before)) : null;
     if (!p || !text) return;
     const basis = p.basis.slice(0, 6000);
     out = applySuggestion(out, c.target, text, { op: c.op, basis, sig: signAiText(o.userId, text, basis) });
     changes.push({ where: c.where, before: c.before, after: text, reason: c.op === "ats" ? `Uses the posting's terms your experience supports: ${c.keywords.join(", ")}.` : "Clearer, stronger opening with the same facts." });
   });
-  const summary = summaryP ? pickRewrite(summaryP, "summary") : null;
+  const summary = summaryP ? pickRewrite(summaryP, "summary", duties, noLessRelevant(summaryBefore)) : null;
   if (summaryP && summary) {
     const basis = summaryP.basis.slice(0, 6000);
-    const before = out.sections.find((s) => s.kind === "summary")?.lines[0]?.text ?? "";
+    const before = summaryBefore;
     out = applySuggestion(out, { kind: "summary" }, summary, { op: "summary", basis, sig: signAiText(o.userId, summary, basis) });
     changes.unshift({ where: "Summary", before, after: summary, reason: "Written for this role from facts already on your resume." });
   }
