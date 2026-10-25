@@ -7,6 +7,8 @@ import { CountUp, Reveal, Stagger } from "@/components/motion";
 import { Card, CompanyMark, Label, LinkButton, MatchBadge, Notice, SectionHeader, cx } from "@/components/ui";
 import { AnalyticsPanel, TodayPanel, type TodayItem } from "@/components/dashboard-panels";
 import { searchJobs } from "@/lib/data/jobs";
+import { normalizeCampusPrefs } from "@/lib/domain/campus-fit";
+import { SJSU_ONLY } from "@/lib/scope";
 import { analyze } from "@/lib/domain/analytics";
 import { resumeStatus } from "@/lib/resume/profile";
 import { ago, greeting, miles, place, TYPE_LABEL } from "@/lib/format";
@@ -20,11 +22,12 @@ export default async function Dashboard() {
   const now = new Date();
   const in7 = new Date(now.getTime() + 7 * 86_400_000).toISOString();
 
-  const { data: profile } = await db.from("profiles").select("full_name, radius_miles, origin_label, work_authorization").eq("id", user.id).single();
+  const { data: profile } = await db.from("profiles").select("full_name, radius_miles, origin_label, work_authorization, campus_prefs").eq("id", user.id).single();
   const radius = profile?.radius_miles ?? 25;
 
   const [best, fresh, campus, interns, nearby, apps, interviews, follows, deadlines, lastRun, digest, resume, dueFollows, soonInterviews, allApps] = await Promise.all([
-    searchJobs(db, { postedWithinDays: 14, sort: "match", limit: 6 }),
+    // SJSU mode ranks exactly like /sjsu: campus fit, the student's desk-only preference, every open job (not only new ones).
+    SJSU_ONLY ? searchJobs(db, { onCampus: true, deskOnly: normalizeCampusPrefs(profile?.campus_prefs).deskOnly, sort: "fit", limit: 6 }) : searchJobs(db, { postedWithinDays: 14, sort: "match", limit: 6 }),
     searchJobs(db, { postedWithinDays: 1, sort: "match", limit: 100 }),
     searchJobs(db, { onCampus: true, sort: "new", limit: 3 }),
     searchJobs(db, { types: ["internship", "co_op"], onCampus: false, maxMiles: radius, includeRemote: false, sort: "match", limit: 6 }),
@@ -124,7 +127,7 @@ export default async function Dashboard() {
       </Reveal>
 
       <Reveal as="section" className="flex flex-col gap-5">
-        <SectionHeader eyebrow="Ranked for you" title="Best new opportunities" action={<LinkButton href="/discover" variant="ghost" size="sm">See all <ArrowUpRight size={14} /></LinkButton>} />
+        <SectionHeader eyebrow="Ranked for you" title={SJSU_ONLY ? "Best campus jobs for you" : "Best new opportunities"} action={<LinkButton href={SJSU_ONLY ? "/sjsu" : "/discover"} variant="ghost" size="sm">See all <ArrowUpRight size={14} /></LinkButton>} />
         <JobGrid jobs={best.jobs} empty={{ title: "No recent listings yet", body: "Run FRIDAY to search every source, or widen your filters in Discover.", action: <RunAgentButton /> }} />
       </Reveal>
 

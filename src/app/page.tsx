@@ -5,7 +5,7 @@ import { Card, Label, LinkButton } from "@/components/ui";
 import { REGISTRY } from "@/lib/discovery/registry";
 import { getUser } from "@/lib/supabase/server";
 
-const PIPELINE = ["Discover", "Filter", "Deduplicate", "Verify", "Match", "Analyze", "Tailor", "Prepare", "You review", "You apply", "Track", "Follow up", "Interview", "Offer"];
+const PIPELINE = ["Discover", "Filter", "Deduplicate", "Verify", "Match", "Analyze", "Tailor", "Prepare", "You review", "You approve", "Track", "Follow up", "Interview", "Offer"];
 const SJSU_FEEDS = REGISTRY.filter((c) => c.isSjsu).length;
 
 export default async function Landing() {
@@ -37,7 +37,7 @@ export default async function Landing() {
             a job board.
           </h1>
           <p className="max-w-[44ch] text-[17px] leading-relaxed text-muted">
-            FRIDAY checks {SJSU_FEEDS} official SJSU hiring pages every 5 minutes, ranks each on-campus opening against you, tailors your resume to it and tells you on Telegram. You approve; it applies.
+            FRIDAY checks {SJSU_FEEDS} official SJSU hiring pages every 5 minutes, ranks each on-campus opening against you, tailors your resume to it and tells you on Telegram. You approve; FRIDAY emails the application from your Gmail, or hands you the resume and the form link.
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <LinkButton href={cta.href} variant="primary" size="lg">{cta.label}</LinkButton>
@@ -53,8 +53,8 @@ export default async function Landing() {
       <div id="how" className="relative z-10 mx-auto max-w-[1240px] px-5 md:px-10">
         <WordReveal
           kicker="What FRIDAY does"
-          text="FRIDAY finds the jobs, checks every source, explains each match, and prepares your application. You review. You apply."
-          highlight={["review", "apply"]}
+          text="FRIDAY finds the jobs, checks every source, explains each match, and prepares your application. You review. You approve."
+          highlight={["review", "approve"]}
         />
       </div>
 
@@ -70,13 +70,13 @@ export default async function Landing() {
             </li>
           ))}
         </ol>
-        <p className="mt-4 max-w-[60ch] text-[13.5px] text-muted">The two steps in orange are always yours. FRIDAY never submits an application, solves a CAPTCHA, or signs in anywhere on your behalf.</p>
+        <p className="mt-4 max-w-[60ch] text-[13.5px] text-muted">The two steps in orange are always yours. FRIDAY never sends anything you haven’t approved, never signs in anywhere as you, and never solves a CAPTCHA.</p>
         </Reveal>
 
         <Stagger className="mt-16 grid gap-3 md:grid-cols-3" gap={0.09}>
           {[
             ["01", "SJSU first", "On-campus jobs from official SJSU pages — Library, Associated Students, Peer Connections and more — plus one-step import from Handshake."],
-            ["02", "Straight from the source", "Internships from NVIDIA, Adobe, Cisco, Waymo and dozens more, read from each company's own careers system. Duplicates merge; the official apply link wins."],
+            ["02", "Straight from the source", "Read from each office's own hiring page or job board, checked every 5 minutes: the real application link, pay and duties, never a reposted copy."],
             ["03", "No mystery scores", "Every match shows what lines up, what's missing, and how hard it is — with a concrete way to close each gap. Resume tailoring never invents experience."],
           ].map(([n, t, b]) => (
             <Card key={t} className="flex flex-col gap-4 p-6">

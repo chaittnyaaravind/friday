@@ -18,6 +18,7 @@ import { explainMatch } from "@/lib/domain/explain";
 import { authGuidance, computeMatch, learnSuggestion, type Gap, type MatchJob, type Reason } from "@/lib/domain/match";
 import { loadProfileItems } from "@/lib/resume/profile";
 import { ago, deadlineLabel, longDate, miles, place, SOURCE_LABEL, TYPE_LABEL } from "@/lib/format";
+import { SJSU_ONLY } from "@/lib/scope";
 import { createSupabaseServer, requireUser } from "@/lib/supabase/server";
 
 export async function generateMetadata({ params }: PageProps<"/jobs/[id]">) {
@@ -97,7 +98,8 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
   const shownConcerns = eligibility ? concerns.filter((c) => !coveredByEligibility.test(c.text)) : concerns;
 
   const facts: [string, React.ReactNode][] = [
-    ["Company", <Link key="c" href={`/companies/${company.slug}`} className="hover:underline">{company.name}</Link>],
+    // Company pages are off-campus-only (lib/scope.ts): in SJSU mode the employer is plain text, not a link that bounces.
+    ["Company", SJSU_ONLY ? company.name : <Link key="c" href={`/companies/${company.slug}`} className="hover:underline">{company.name}</Link>],
     ["Location", <>{place(job)}{match?.distance_miles != null && !job.is_on_campus ? <span className="num ml-2 font-mono text-[12px] text-dim">{miles(match.distance_miles)}</span> : null}{job.is_hybrid ? " · Hybrid" : ""}{job.is_remote ? " · Remote OK" : ""}</>],
     ["Type", `${TYPE_LABEL[job.employment_type]}${job.category && job.category !== "Campus" ? ` · ${job.category}` : ""}`],
     ...(job.department ? [["Department", job.department] as [string, React.ReactNode]] : []),
@@ -111,15 +113,15 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
 
   return (
     <div className="flex flex-col gap-10">
-      <Link href="/discover" className="reveal inline-flex w-fit items-center gap-1.5 text-[13px] text-muted hover:text-text">
-        <ArrowLeft size={14} /> Discover
+      <Link href={SJSU_ONLY ? "/sjsu" : "/discover"} className="reveal inline-flex w-fit items-center gap-1.5 text-[13px] text-muted hover:text-text">
+        <ArrowLeft size={14} /> {SJSU_ONLY ? "SJSU Jobs" : "Discover"}
       </Link>
 
       <header className="reveal flex flex-col gap-5">
         <div className="flex items-center gap-3">
           <CompanyMark name={company.name} size={44} />
           <div className="flex flex-col gap-1">
-            <Link href={`/companies/${company.slug}`} className="text-[14px] text-muted hover:text-text">{company.name}</Link>
+            {SJSU_ONLY ? <span className="text-[14px] text-muted">{company.name}</span> : <Link href={`/companies/${company.slug}`} className="text-[14px] text-muted hover:text-text">{company.name}</Link>}
             <Label>{TYPE_LABEL[job.employment_type]} · {place(job)}</Label>
           </div>
         </div>

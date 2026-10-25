@@ -102,10 +102,14 @@ export function JobGrid({ jobs, empty }: { jobs: JobListItem[]; empty?: { title:
   if (!jobs.length) return <EmptyState title={empty?.title ?? "Nothing here yet"} body={empty?.body} action={empty?.action} />;
   return (
     // grid-cols-1 is minmax(0, 1fr): without it the phone-width column grows to the card's longest unbreakable line (the footer) and the page scrolls sideways.
-    <Stagger className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      {jobs.map((j) => (
-        <JobCard key={j.id} job={j} />
-      ))}
-    </Stagger>
+    // Columns follow the grid's OWN width (container query), not the screen's: beside the sidebar on /sjsu a 1280px screen
+    // left three ~190px columns and truncated every title.
+    <div className="@container">
+      <Stagger className="grid grid-cols-1 gap-3 @2xl:grid-cols-2 @5xl:grid-cols-3">
+        {jobs.map((j) => (
+          <JobCard key={j.id} job={j} />
+        ))}
+      </Stagger>
+    </div>
   );
 }

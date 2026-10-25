@@ -9,8 +9,8 @@ const STATIC_ZERO = motionValue(0);
 
 const CARDS = [
   { co: "SJSU King Library", title: "IT Helpdesk Student Assistant", meta: "SJSU Campus · On-campus", score: 91, ok: ["On campus", "Student role"], miss: [] as string[] },
-  { co: "Cisco", title: "Software Engineer Full Stack / Backend I (Intern)", meta: "San Jose, CA · 1 mi", score: 84, ok: ["Java", "Python", "REST APIs"], miss: ["Kubernetes"] },
-  { co: "Adobe", title: "2027 Intern — Software Engineer", meta: "San Jose, CA · <1 mi", score: 78, ok: ["Java", "Data Structures"], miss: ["C++"] },
+  { co: "SJSU Associated Students", title: "Counter Clerk", meta: "SJSU Campus · $18.45/hr", score: 72, ok: ["Front desk", "Customer service"], miss: ["Cash handling"] },
+  { co: "SJSU Parking Services", title: "Parking Services Office Student Assistant", meta: "SJSU Campus · $18/hr", score: 67, ok: ["Front desk", "Desk-based"], miss: ["Microsoft Office"] },
 ];
 
 export function HeroStack() {
