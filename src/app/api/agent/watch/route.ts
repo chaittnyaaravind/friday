@@ -26,16 +26,18 @@ async function authorized(req: Request, db: SupabaseClient) {
 }
 
 /**
- * GET /api/agent/watch — the 5-minute SJSU watch (called by pg_cron, migration 0019). Re-reads only the official SJSU
- * sources, then prepares and sends a Telegram card for every new desk job a linked student would want. The full
- * multi-source discovery stays on /api/agent/cron.
+ * GET /api/agent/watch — the SJSU watch, called every minute by pg_cron (migration 0022). Most ticks are FAST: each
+ * official SJSU source is listed and only postings FRIDAY does not hold yet are read, so a new desk job reaches Telegram
+ * within about a minute or two. Every 10th minute (or ?full=1) is a FULL run: every posting re-read, changes recorded,
+ * filled jobs closed. Then a Telegram card is prepared for every new desk job a linked student would want.
  */
 export async function GET(req: Request) {
   const started = Date.now();
   try {
     const db = createSupabaseAdmin();
     if (!(await authorized(req, db))) return Response.json({ error: "Unauthorized" }, { status: 401 });
-    const { newJobIds, runId, created, failures, companies } = await runDiscovery(db, { trigger: "cron", onlySjsu: true });
+    const full = new URL(req.url).searchParams.get("full") === "1" || new Date().getUTCMinutes() % 10 === 0;
+    const { newJobIds, runId, created, failures, companies } = await runDiscovery(db, { trigger: "cron", onlySjsu: true, fast: !full });
     let queued = await enqueue(db, newJobIds);
     // Catch-up: any open desk job a linked student has never been sent (reclassified as desk, or missed earlier). Idempotent.
     const { data: links } = await db.from("hunter_links").select("user_id").eq("enabled", true).not("telegram_chat_id", "is", null);
@@ -43,7 +45,7 @@ export async function GET(req: Request) {
     // Leave headroom under maxDuration; anything unfinished is picked up by the next tick.
     // One item can take ~70s (AI tailoring + research), so the last one may start no later than ~200s in.
     const hunter = await processQueue(db, { deadline: started + 200_000 });
-    return ok({ runId, companies, created, failures: failures.length, queued, hunter, ms: Date.now() - started });
+    return ok({ runId, mode: full ? "full" : "fast", companies, created, failures: failures.length, queued, hunter, ms: Date.now() - started });
   } catch (e) {
     return errorResponse(e);
   }

@@ -44,7 +44,7 @@ export async function POST(req: Request) {
         return Response.json({ ok: true });
       }
       const queued = await backfill(db, userId);
-      await sendMessage(chatId, { text: `✅ Linked. FRIDAY checks SJSU every 5 minutes and sends new desk jobs here, ready to approve.${queued ? `\nPreparing ${queued} open desk job${queued === 1 ? "" : "s"} for you now…` : ""}`, buttons: [] });
+      await sendMessage(chatId, { text: `✅ Linked. FRIDAY checks SJSU every minute and sends new desk jobs here, ready to approve.${queued ? `\nPreparing ${queued} open desk job${queued === 1 ? "" : "s"} for you now…` : ""}`, buttons: [] });
       if (queued) await processQueue(db, { deadline: Date.now() + 90_000, userId });
       return Response.json({ ok: true });
     }
@@ -61,7 +61,7 @@ export async function POST(req: Request) {
       }
       const toast = m[1] === "ap" ? await approve(db, item, chatId) : m[1] === "sk" ? await skip(db, item, chatId) : await markApplied(db, item, chatId);
       await answerCallback(cb.id, toast);
-      // A card that changed is re-prepared right away rather than at the next 5-minute tick.
+      // A card that changed is re-prepared right away rather than at the next watch tick.
       if (m[1] === "ap") await processQueue(db, { deadline: Date.now() + 60_000, userId: item.user_id, limit: 1 });
     }
     return Response.json({ ok: true });

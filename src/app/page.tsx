@@ -37,7 +37,7 @@ export default async function Landing() {
             a job board.
           </h1>
           <p className="max-w-[44ch] text-[17px] leading-relaxed text-muted">
-            FRIDAY checks {SJSU_FEEDS} official SJSU hiring pages every 5 minutes, ranks each on-campus opening against you, tailors your resume to it and tells you on Telegram. You approve; FRIDAY emails the application from your Gmail, or hands you the resume and the form link.
+            FRIDAY checks {SJSU_FEEDS} official SJSU hiring pages every minute, ranks each on-campus opening against you, tailors your resume to it and tells you on Telegram. You approve; FRIDAY hands you the tailored resume and the application link.
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <LinkButton href={cta.href} variant="primary" size="lg">{cta.label}</LinkButton>
@@ -76,7 +76,7 @@ export default async function Landing() {
         <Stagger className="mt-16 grid gap-3 md:grid-cols-3" gap={0.09}>
           {[
             ["01", "SJSU first", "On-campus jobs from official SJSU pages — Library, Associated Students, Peer Connections and more — plus one-step import from Handshake."],
-            ["02", "Straight from the source", "Read from each office's own hiring page or job board, checked every 5 minutes: the real application link, pay and duties, never a reposted copy."],
+            ["02", "Straight from the source", "Read from each office's own hiring page or job board, checked every minute: the real application link, pay and duties, never a reposted copy."],
             ["03", "No mystery scores", "Every match shows what lines up, what's missing, and how hard it is — with a concrete way to close each gap. Resume tailoring never invents experience."],
           ].map(([n, t, b]) => (
             <Card key={t} className="flex flex-col gap-4 p-6">

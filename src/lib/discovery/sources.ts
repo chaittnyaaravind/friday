@@ -43,6 +43,8 @@ export type CompanyFeed = {
   name: string;
   ats: SourceKind;
   config: Record<string, string>;
+  /** Fast tick: external ids already held. Adapters skip their detail fetches (the posting is dropped by the caller). */
+  known?: Set<string>;
 };
 
 const UA = "Mozilla/5.0 (compatible; FRIDAY-JobAgent/1.0; student career assistant)";
@@ -551,6 +553,7 @@ async function adpCareerCenter(c: CompanyFeed): Promise<RawPosting[]> {
   // Every listed requisition is read: the student filter needs the detail, so a cap before it could hide student jobs.
   for (const r of reqs) {
     if (!/^[0-9_]{5,30}$/.test(r.itemID)) continue;
+    if (c.known?.has(`adp:${r.itemID}`)) continue; // fast tick: already held, nothing to read
     const detail = await getJSON<AdpReq>(`${ADP}/${r.itemID}?${q}`).catch(() => null);
     if (!detail) { incomplete = true; continue; }
     const p = mapAdpRequisition({ ...r, ...detail }, c);
@@ -636,6 +639,7 @@ async function sjsuPage(c: CompanyFeed): Promise<RawPosting[]> {
     // King Library: each opening links its job description as an Acrobat share. Read it for duties, pay and the real
     // application form. One unreadable PDF keeps that posting's last good copy (detailUnread).
     for (const p of postings) {
+      if (c.known?.has(p.externalId)) continue; // fast tick: already held (the caller drops it)
       const read = () => acrobatText(p.applyUrl).catch(() => null);
       const isAcrobat = /^https:\/\/acrobat\.adobe\.com\//i.test(p.applyUrl);
       const got = isAcrobat ? (await read()) ?? (await read()) : null; // one retry
@@ -661,6 +665,7 @@ async function sjsuPage(c: CompanyFeed): Promise<RawPosting[]> {
   // stated pay. One PDF failing leaves that posting with the plain description; it never fails the source.
   const notes = pageNotes(html);
   for (const p of postings) {
+    if (c.known?.has(p.externalId)) continue; // fast tick: already held (the caller drops it)
     const text = await pdfText(p.applyUrl).catch(() => null);
     if (text) {
       p.description = [text, notes].filter(Boolean).join("\n\n").slice(0, 20_000);

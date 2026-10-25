@@ -22,7 +22,7 @@ import { archiveExpired, closeStale, normalizePosting, upsertJobs, type Normaliz
 import type { ProviderMetrics } from "./providers";
 import { REGISTRY } from "./registry";
 import { SJSU_ONLY } from "@/lib/scope";
-import { ADAPTERS, feedMeta, usajobsConfigured, type CompanyFeed, type RawPosting, type SourceKind } from "./sources";
+import { ADAPTERS, feedMeta, usajobsConfigured, withFeed, type CompanyFeed, type RawPosting, type SourceKind } from "./sources";
 
 type CompanyRow = { id: string; slug: string; name: string; ats: string | null; ats_config: Record<string, string>; discoverable: boolean; last_crawled_at: string | null };
 
@@ -105,7 +105,7 @@ export type DiscoveryReport = {
 
 export async function runDiscovery(
   db: SupabaseClient,
-  opts: { trigger: "cron" | "manual" | "user"; userId?: string; companySlugs?: string[]; onlySjsu?: boolean } = { trigger: "manual" },
+  opts: { trigger: "cron" | "manual" | "user"; userId?: string; companySlugs?: string[]; onlySjsu?: boolean; fast?: boolean } = { trigger: "manual" },
 ): Promise<DiscoveryReport> {
   const startedAt = new Date().toISOString();
   const { data: run, error: runErr } = await db
@@ -117,10 +117,13 @@ export async function runDiscovery(
 
   const report: DiscoveryReport = { runId: run.id, companies: 0, failures: [], seen: 0, kept: 0, created: 0, updated: 0, reopened: 0, baseline: 0, closed: 0, closeBlocked: [], archived: 0, providers: {}, skipped: {}, excluded: {}, newJobIds: [] };
   try {
-    const { count: sourcesBefore } = await db.from("companies").select("id", { count: "exact", head: true }).eq("discoverable", true);
-    await syncCatalog(db);
-    const { count: sourcesAfter } = await db.from("companies").select("id", { count: "exact", head: true }).eq("discoverable", true);
-    if ((sourcesAfter ?? 0) > (sourcesBefore ?? 0) && (sourcesBefore ?? 0) > 0) await notifySourceUpdate(db, (sourcesAfter ?? 0) - (sourcesBefore ?? 0), sourcesAfter ?? 0);
+    // A fast tick (see /api/agent/watch) only looks for NEW postings: the catalog is synced on full runs.
+    if (!opts.fast) {
+      const { count: sourcesBefore } = await db.from("companies").select("id", { count: "exact", head: true }).eq("discoverable", true);
+      await syncCatalog(db);
+      const { count: sourcesAfter } = await db.from("companies").select("id", { count: "exact", head: true }).eq("discoverable", true);
+      if ((sourcesAfter ?? 0) > (sourcesBefore ?? 0) && (sourcesBefore ?? 0) > 0) await notifySourceUpdate(db, (sourcesAfter ?? 0) - (sourcesBefore ?? 0), sourcesAfter ?? 0);
+    }
     const skills = await skillIdMap(db);
     let q = db.from("companies").select("id, slug, name, ats, ats_config, discoverable, last_crawled_at").eq("discoverable", true);
     if (opts.companySlugs?.length) q = q.in("slug", opts.companySlugs);
@@ -161,8 +164,12 @@ export async function runDiscovery(
       }
       const health = { source: c.ats as string, scope: c.slug };
       try {
-        const feed: CompanyFeed = { slug: c.slug, name: c.name, ats: c.ats as SourceKind, config: c.ats_config };
-        const postings = await adapter(feed);
+        // Fast tick: postings FRIDAY already holds from this source are skipped (no detail fetch, no rewrite, no close);
+        // only new ones are read in full. Full runs (every 10 min) refresh and close as before.
+        const known = opts.fast ? await knownExternalIds(db, c.id, c.ats as string) : undefined;
+        const feed: CompanyFeed = { slug: c.slug, name: c.name, ats: c.ats as SourceKind, config: c.ats_config, known };
+        const fetched = await adapter(feed);
+        const postings = known ? withFeed(fetched.filter((p) => !known.has(p.externalId)), { total: feedMeta(fetched).total, incomplete: true }) : fetched;
         report.seen += postings.length;
         await reuseLastGoodDetail(db, postings);
         const kept: NormalizedJob[] = [];
@@ -186,7 +193,8 @@ export async function runDiscovery(
         report.newJobIds.push(...up.created);
         // The adapter's own view of its feed: the count BEFORE its student filter, and whether details were left out.
         const info = feedMeta(postings);
-        const close = await closeStale(db, c.id, c.ats!, startedAt, { returned: info.total, incomplete: info.incomplete, runId: run.id });
+        // A fast tick saw only what is new, so it proves nothing about closures: those wait for the next full run.
+        const close = opts.fast ? { closed: 0, blocked: null, candidates: 0, activeBefore: 0 } : await closeStale(db, c.id, c.ats!, startedAt, { returned: info.total, incomplete: info.incomplete, runId: run.id });
         report.closed += close.closed;
         if (close.blocked) report.closeBlocked.push({ company: c.slug, source: c.ats!, reason: close.blocked, candidates: close.candidates, active: close.activeBefore });
         await db.from("companies").update({ last_crawled_at: new Date().toISOString() }).eq("id", c.id);
@@ -198,17 +206,20 @@ export async function runDiscovery(
       }
     });
 
-    report.archived = await archiveExpired(db, Date.now(), { runId: run.id });
+    const quiet = opts.fast && !report.newJobIds.length;
+    report.archived = quiet ? 0 : await archiveExpired(db, Date.now(), { runId: run.id });
     // The tracker follows the listings (pre-submission applications only; see apply/listing-sync.ts). Never fatal to a run.
-    try {
-      const sync = await syncApplicationsWithListings(db);
-      report.trackerClosed = sync.closed;
-      report.trackerReopened = sync.reopened;
-    } catch (e) {
-      report.failures.push({ company: "(tracker sync)", error: e instanceof Error ? e.message : String(e) });
+    if (!quiet) {
+      try {
+        const sync = await syncApplicationsWithListings(db);
+        report.trackerClosed = sync.closed;
+        report.trackerReopened = sync.reopened;
+      } catch (e) {
+        report.failures.push({ company: "(tracker sync)", error: e instanceof Error ? e.message : String(e) });
+      }
+      await rematchAll(db, { newJobIds: new Set(report.newJobIds) });
+      await raiseReminders(db);
     }
-    await rematchAll(db, { newJobIds: new Set(report.newJobIds) });
-    await raiseReminders(db);
 
     await db
       .from("agent_runs")
@@ -481,4 +492,10 @@ async function reuseLastGoodDetail(db: SupabaseClient, postings: RawPosting[]) {
     if (prev.apply_url) p.applyUrl = prev.apply_url;
     if (prev.pay_text) p.payText = prev.pay_text;
   }
+}
+
+/** External ids of the ACTIVE listings FRIDAY holds from this company's source: what a fast tick may skip. */
+async function knownExternalIds(db: SupabaseClient, companyId: string, source: string): Promise<Set<string>> {
+  const { data } = await db.from("job_sources").select("external_id, jobs!inner(company_id, status)").eq("source", source).eq("jobs.company_id", companyId).eq("jobs.status", "active");
+  return new Set((data ?? []).map((r) => r.external_id as string));
 }

@@ -57,7 +57,7 @@ export function AutoHunter() {
       <div className="flex flex-col gap-1.5">
         <Label>Auto Hunter</Label>
         <p className="max-w-[64ch] text-[13px] leading-snug text-muted">
-          FRIDAY checks the official SJSU hiring pages every 5 minutes. For each new desk job it tailors your resume, prepares the application and sends it to Telegram. One tap approves it. Email applications then go out from your own Gmail; everything else comes back to you with the resume PDF and the official link. Nothing is ever sent without your approval.
+          FRIDAY checks the official SJSU hiring pages every minute. For each new desk job it tailors your resume, prepares the application and sends it to Telegram, usually within a couple of minutes of the posting going up. One tap approves it: FRIDAY sends you the resume PDF and the official application link (with the optional Gmail bridge, email applications go out from your Gmail). Nothing is ever sent without your approval.
         </p>
       </div>
 
@@ -86,9 +86,11 @@ export function AutoHunter() {
         )}
       </section>
 
-      <section className="flex flex-col gap-2.5">
-        <h3 className="text-[14px] font-medium">2 · Gmail bridge (Handshake alerts + sending)</h3>
-        <p className="max-w-[64ch] text-[12.5px] leading-snug text-muted">
+      {/* Optional and closed by default: FRIDAY reads SJSU's own pages on its own; the bridge only adds Handshake alerts
+          and sending email applications from the student's Gmail. */}
+      <details className="group flex flex-col gap-2.5" open={s.bridge.connected || undefined}>
+        <summary className="cursor-pointer text-[14px] font-medium">Optional · Gmail bridge <span className="font-normal text-muted">(not needed: FRIDAY reads SJSU’s hiring pages on its own)</span></summary>
+        <p className="mt-2 max-w-[64ch] text-[12.5px] leading-snug text-muted">
           A small Google Apps Script in your own Gmail. Every 5 minutes it passes your Handshake job-alert emails to FRIDAY and sends the email applications you approved. FRIDAY never logs in to Handshake. Turn on Handshake’s job alerts (Handshake → Saved searches → email) so new postings reach your inbox.
         </p>
         {token ? (
@@ -112,7 +114,7 @@ export function AutoHunter() {
           </Button>
           {s.bridge.connected ? <Button size="sm" onClick={() => run("unbridge", () => api("/api/hunter/bridge", { method: "DELETE" }))}>Disconnect</Button> : null}
         </div>
-      </section>
+      </details>
 
       {s.recent.length ? (
         <section className="flex flex-col gap-2">

@@ -116,6 +116,6 @@ export function openJobsNotice(o: { open: number; desk: number; byEmployer: { co
     L.push("", "<b>Desk jobs</b>");
     for (const j of desk.slice(0, 15)) L.push(`• <a href="${esc(`${appUrl}/jobs/${j.id}`)}">${esc(clip(j.title, 70))}</a> · ${esc(j.company.replace(/^SJSU /, ""))}${j.deadline ? ` · by ${esc(j.deadline.slice(0, 10))}` : ""}`);
   }
-  L.push("", "Counted from SJSU's official hiring pages FRIDAY reads every 5 minutes. Handshake-only postings arrive through your alert emails.");
+  L.push("", "Counted from SJSU's official hiring pages FRIDAY reads every minute. Handshake-only postings are not included: Handshake needs your login.");
   return { text: clip(L.join("\n"), MAX), buttons: safeRows([[{ text: "Open SJSU jobs in FRIDAY", url: `${appUrl}/sjsu` }]]) };
 }

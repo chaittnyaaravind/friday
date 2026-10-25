@@ -163,3 +163,24 @@ describe("search parameters for the campus page", () => {
     expect(invalidFilterParams(new URLSearchParams("physical=lifting&minPay=-3"))).toEqual(["physical", "minPay"]);
   });
 });
+
+describe("fast ticks find only new postings; full runs refresh and close", () => {
+  const fast = () => runDiscovery(db as never, { trigger: "cron", companySlugs: ["sjsu-student-union"], fast: true });
+  it("a fast tick stores the new posting only, tells the adapter what is known, and closes nothing", async () => {
+    h.adapter.mockResolvedValue(POSTINGS());
+    await crawl(); // full baseline
+    const before = db.tables.jobs.length;
+    at("2026-10-22T12:01:00.000Z");
+    h.adapter.mockResolvedValue([...POSTINGS().slice(1), campus({ title: "Library Circulation Assistant" })]); // one gone, one new
+    const r = await fast();
+    expect(h.adapter.mock.calls.at(-1)![0].known).toBeInstanceOf(Set);
+    expect([...h.adapter.mock.calls.at(-1)![0].known]).toContain("su:Information Desk Assistant");
+    expect(r.created).toBe(1);
+    expect(r.updated).toBe(0);
+    expect(db.tables.jobs.length).toBe(before + 1);
+    expect(job("Information Desk Assistant").status).toBe("active"); // not seen on a fast tick, but never closed by one
+    at("2026-10-22T12:10:00.000Z");
+    await crawl(); // full: the missing posting closes now
+    expect(job("Information Desk Assistant").status).toBe("closed");
+  });
+});

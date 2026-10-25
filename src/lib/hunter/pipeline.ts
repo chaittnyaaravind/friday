@@ -137,7 +137,7 @@ async function remindToUpload(db: SupabaseClient, userId: string) {
   const count = waiting?.length ?? 0;
   if (link?.telegram_chat_id) {
     await sendMessage(link.telegram_chat_id as number, {
-      text: `📄 ${count} SJSU desk job${count === 1 ? " is" : "s are"} waiting for you, but FRIDAY has no resume for this account yet.\nUpload your resume in FRIDAY → Resume and confirm what it found. Within 5 minutes the jobs arrive here with a tailored resume, ready to approve.`,
+      text: `📄 ${count} SJSU desk job${count === 1 ? " is" : "s are"} waiting for you, but FRIDAY has no resume for this account yet.\nUpload your resume in FRIDAY → Resume and confirm what it found. Within a couple of minutes the jobs arrive here with a tailored resume, ready to approve.`,
       buttons: [[{ text: "Upload resume", url: `${siteUrl()}/resume` }]],
     });
   }
