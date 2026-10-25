@@ -58,7 +58,13 @@ export function assessPhysical(description: string | null | undefined): Physical
   const physical = flags.filter((f) => f.kind !== "schedule");
   const firm = physical.filter((f) => !f.hedged);
   let level: PhysicalLevel;
-  if (firm.some((f) => f.heavy) || firm.filter((f) => f.kind !== "standing").length >= 2 || firm.length >= 3) level = "high";
+  // Light lifting, sweeping and breaking down boxes are real but light (an A.S. print-shop counter clerk, 2026-10-25);
+  // moving furniture or equipment, outdoor work and long standing are strenuous. "High" needs heavy lifting, two strenuous
+  // burdens, or one strenuous burden on top of light work.
+  const isStrenuous = (f: PhysicalFlag) => Boolean(f.heavy) || f.kind === "outdoor" || f.kind === "standing" || (f.kind === "moving" && !/\bboxes\b/i.test(f.text));
+  const strenuous = firm.filter(isStrenuous).length;
+  const light = firm.length - strenuous;
+  if (firm.some((f) => f.heavy) || strenuous >= 2 || (strenuous >= 1 && light >= 1)) level = "high";
   else if (physical.length) level = "moderate";
   // "Low" needs the posting to describe the work: enough text, and at least two desk/computer duties.
   else if (text.length >= 120 && desk.length >= 2) level = "low";

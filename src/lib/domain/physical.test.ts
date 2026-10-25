@@ -59,3 +59,16 @@ describe("hedged CSU boilerplate (\"may be required to …\") is occasional, not
     expect(a.level).toBe("high");
   });
 });
+
+describe("assessPhysical: light vs strenuous burdens", () => {
+  it("rates a counter job with light lifting, boxes and sweeping as some physical work, not demanding", async () => {
+    const { assessPhysical } = await import("./physical");
+    const clerk = "Assist customers at the print shop counter, take orders and process payments. Must be able to lift or carry paper. Duties include breaking down boxes and sweeping the shop.";
+    expect(assessPhysical(clerk).level).toBe("moderate");
+  });
+  it("keeps outdoor work plus lifting, or moving equipment twice over, as physically demanding", async () => {
+    const { assessPhysical } = await import("./physical");
+    expect(assessPhysical("Work outdoors at club sports events. Lift and carry gear to the field.").level).toBe("high");
+    expect(assessPhysical("Set up tables and chairs for events. Work in all weather conditions.").level).toBe("high");
+  });
+});

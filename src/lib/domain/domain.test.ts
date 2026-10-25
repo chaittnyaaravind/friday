@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { extractSkills, resolveSkill } from "./skills";
 import { resolveLocation, distanceMiles, SJSU } from "./geo";
-import { classifyRole, classifyCategory, canonicalKey, parsePay, htmlToText, parseDeadline } from "./normalize";
+import { classifyRole, classifyCategory, canonicalKey, decodeEntities, parsePay, htmlToText, parseDeadline } from "./normalize";
 import { extractRequirements } from "./requirements";
 import { computeMatch, authGuidance, type MatchJob, type MatchProfile } from "./match";
 
@@ -170,5 +170,13 @@ describe("match confidence", () => {
   it("broad coverage of many requirements still scores strong", () => {
     const rich: MatchJob = { ...job, requirements: ["java", "python", "sql", "rest", "dsa"].map((s) => ({ slug: s, label: s, kind: "required" as const })) };
     expect(computeMatch(profile, rich).score).toBeGreaterThanOrEqual(90);
+  });
+});
+
+describe("decodeEntities", () => {
+  it("decodes the named entities employer pages use, and leaves unknown ones alone", () => {
+    expect(decodeEntities("Associated Students&rsquo; mission at San Jos&eacute; State &ndash; 2026")).toBe("Associated Students’ mission at San José State – 2026");
+    expect(decodeEntities("&frac12; shift &bogus; &#128640; &#x1F680;")).toBe("½ shift &bogus; 🚀 🚀");
+    expect(decodeEntities("&#0; &#99999999;")).toBe("&#0; &#99999999;");
   });
 });

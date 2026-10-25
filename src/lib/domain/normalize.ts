@@ -144,9 +144,21 @@ export function decodeEntities(s: string): string {
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&#39;|&apos;|&#x27;/g, "'")
-    .replace(/&#(\d+);/g, (_, d) => String.fromCharCode(Number(d)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)));
+    // Named entities employer pages really use (found 2026-10-25: A.S. postings read "Students&rsquo;", "San Jos&eacute;").
+    .replace(/&([a-z]+[0-9]*);/gi, (m, n: string) => NAMED[n] ?? NAMED[n.toLowerCase()] ?? m)
+    .replace(/&#(\d+);/g, (m, d) => codePoint(Number(d)) ?? m)
+    .replace(/&#x([0-9a-f]+);/gi, (m, h) => codePoint(parseInt(h, 16)) ?? m);
 }
+
+const codePoint = (n: number) => (Number.isInteger(n) && n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : null);
+const NAMED: Record<string, string> = {
+  rsquo: "’", lsquo: "‘", rdquo: "”", ldquo: "“", sbquo: "‚", bdquo: "„", ndash: "–", mdash: "—", hellip: "…", bull: "•", middot: "·",
+  copy: "©", reg: "®", trade: "™", deg: "°", times: "×", divide: "÷", frac12: "½", frac14: "¼", frac34: "¾",
+  eacute: "é", Eacute: "É", egrave: "è", ecirc: "ê", euml: "ë", aacute: "á", Aacute: "Á", agrave: "à", acirc: "â", auml: "ä", atilde: "ã", aring: "å",
+  iacute: "í", Iacute: "Í", igrave: "ì", icirc: "î", iuml: "ï", oacute: "ó", Oacute: "Ó", ograve: "ò", ocirc: "ô", ouml: "ö", otilde: "õ",
+  uacute: "ú", Uacute: "Ú", ugrave: "ù", ucirc: "û", uuml: "ü", ntilde: "ñ", Ntilde: "Ñ", ccedil: "ç", Ccedil: "Ç", szlig: "ß", yacute: "ý",
+  cent: "¢", pound: "£", euro: "€", yen: "¥", sect: "§", para: "¶", laquo: "«", raquo: "»", iexcl: "¡", iquest: "¿", ensp: " ", emsp: " ", thinsp: " ", zwnj: "", zwj: "", shy: "",
+};
 
 /**
  * Cross-source dedupe key: the same role at the same company in the same city is one
