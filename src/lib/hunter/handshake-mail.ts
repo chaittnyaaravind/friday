@@ -85,7 +85,8 @@ export function parseHandshakeAlert(html: string): HandshakeJob[] {
     let title = clean(m[2]);
     if (!title || GENERIC.test(title) || title.length < 4 || title.length > 150) {
       // "View job" style buttons: the job's title is the text just before the button.
-      const before = clean(html.slice(Math.max(0, (anchors[i - 1]?.index ?? 0) + (anchors[i - 1]?.[0].length ?? 0)), m.index)).split(/ {2,}|\n/).filter(Boolean);
+      // Split on block boundaries BEFORE collapsing whitespace (clean() would turn the line breaks into spaces).
+      const before = htmlToText(html.slice(Math.max(0, (anchors[i - 1]?.index ?? 0) + (anchors[i - 1]?.[0].length ?? 0)), m.index)).split(/\n+| {2,}/).map((t) => t.replace(/\s+/g, " ").trim()).filter(Boolean);
       title = before.at(-1) ?? "";
     }
     if (!title || GENERIC.test(title) || title.length < 4 || title.length > 150) return;

@@ -70,7 +70,19 @@ export async function enqueue(db: SupabaseClient, jobIds: string[], opts: { user
 export async function processQueue(db: SupabaseClient, opts: { deadline: number; userId?: string; limit?: number }) {
   const report = { notified: 0, failed: 0, stale: 0, pending: 0, waiting: 0 };
   if (!telegramConfigured()) return { ...report, skipped: "telegram-not-configured" as const };
-  let q = db.from("hunt_items").select("id, user_id, job_id, attempts").eq("state", "queued").lt("attempts", MAX_ATTEMPTS).order("created_at").limit(opts.limit ?? 15);
+  // A claim older than CLAIM_TTL belongs to a run that died mid-way: give the item back to the queue.
+  await db.from("hunt_items").update({ state: "queued", updated_at: new Date().toISOString() }).eq("state", "preparing").lt("updated_at", new Date(Date.now() - CLAIM_TTL_MS).toISOString());
+  // Items waiting on a resume are left out of the batch (so they never crowd out other students' items) until their
+  // student has resume facts; then they are released here and prepared in this same run.
+  let w = db.from("hunt_items").select("user_id").eq("state", "queued").eq("error", NEEDS_RESUME).limit(200);
+  if (opts.userId) w = w.eq("user_id", opts.userId);
+  const { data: waitingRows } = await w;
+  for (const uid of new Set((waitingRows ?? []).map((r) => r.user_id as string))) {
+    const { data: facts } = await db.from("candidate_items").select("id").eq("user_id", uid).neq("status", "requires_confirmation").limit(1);
+    if (facts?.length) await db.from("hunt_items").update({ error: null, updated_at: new Date().toISOString() }).eq("user_id", uid).eq("state", "queued").eq("error", NEEDS_RESUME);
+    else report.waiting += (waitingRows ?? []).filter((r) => r.user_id === uid).length;
+  }
+  let q = db.from("hunt_items").select("id, user_id, job_id, attempts").eq("state", "queued").lt("attempts", MAX_ATTEMPTS).or(`error.is.null,error.neq.${NEEDS_RESUME}`).order("created_at").limit(opts.limit ?? 15);
   if (opts.userId) q = q.eq("user_id", opts.userId);
   const { data: items, error } = await q;
   if (error) throw error;
@@ -91,6 +103,12 @@ export async function processQueue(db: SupabaseClient, opts: { deadline: number;
       report.pending++;
       continue;
     }
+    // Claim it first: a concurrent run (the watch tick and a webhook) that loses the race skips it, so a card is sent once.
+    const { data: claimed, error: claimError } = await db.from("hunt_items").update({ state: "preparing", updated_at: new Date().toISOString() }).eq("id", it.id).eq("state", "queued").select("id");
+    // Until migration 0020 allows 'preparing', the claim is refused by the state check: prepare unclaimed (the old behaviour)
+    // rather than stall the queue.
+    if (claimError) console.error("hunter: claim unavailable (apply migration 0020):", claimError.message);
+    else if (!claimed?.length) continue;
     try {
       const r = await prepareAndNotify(db, it as { id: string; user_id: string; job_id: string });
       report[r]++;
@@ -104,6 +122,11 @@ export async function processQueue(db: SupabaseClient, opts: { deadline: number;
 }
 
 export const NEEDS_RESUME = "needs_resume";
+const CLAIM_TTL_MS = 15 * 60_000;
+/** The Gmail bridge counts as connected only once its Apps Script has checked in recently (it runs every 5 minutes). */
+export const BRIDGE_LIVE_MS = 2 * 60 * 60_000;
+export const bridgeLive = (l: { bridge_token_hash?: unknown; bridge_seen_at?: unknown } | null | undefined, now = Date.now()) =>
+  Boolean(l?.bridge_token_hash && typeof l.bridge_seen_at === "string" && now - Date.parse(l.bridge_seen_at) < BRIDGE_LIVE_MS);
 
 /** One reminder per wait: items already marked NEEDS_RESUME mean the student was told. */
 async function remindToUpload(db: SupabaseClient, userId: string) {
@@ -126,7 +149,7 @@ const withTimeout = <T>(p: Promise<T>, ms: number) => Promise.race([p, new Promi
 async function prepareAndNotify(db: SupabaseClient, it: { id: string; user_id: string; job_id: string }): Promise<"notified" | "stale"> {
   const userId = it.user_id;
   const [{ data: link }, [job]] = await Promise.all([
-    db.from("hunter_links").select("telegram_chat_id, bridge_token_hash").eq("user_id", userId).maybeSingle(),
+    db.from("hunter_links").select("telegram_chat_id, bridge_token_hash, bridge_seen_at").eq("user_id", userId).maybeSingle(),
     loadActiveJobsForMatching(db, [it.job_id]),
   ]);
   const stale = async (why: string) => {
@@ -164,8 +187,11 @@ async function prepareAndNotify(db: SupabaseClient, it: { id: string; user_id: s
 
   // The channel, decided now so the card says exactly what Approve will do.
   let channel: ApplyChannel = applyChannel(description, applyUrl);
-  if (channel.kind === "email" && !link.bridge_token_hash) {
-    channel = { kind: "site", reason: `This job is applied to by email (${channel.to}). Connect the Gmail bridge in FRIDAY → Settings and FRIDAY can send it from your Gmail next time.`, needs: [] };
+  if (channel.kind === "email" && !bridgeLive(link)) {
+    // A token alone is not a running bridge: unless the Apps Script has checked in, nothing would ever send the email.
+    channel = { kind: "site", reason: link.bridge_token_hash
+      ? `This job is applied to by email (${channel.to}), but your Gmail bridge hasn't checked in. Open the Apps Script and run setup(), and FRIDAY can send these from your Gmail.`
+      : `This job is applied to by email (${channel.to}). Connect the Gmail bridge in FRIDAY → Settings and FRIDAY can send it from your Gmail next time.`, needs: [] };
   }
   let email: { to: string; subject: string; body: string } | null = null;
   if (channel.kind === "email") {
@@ -228,10 +254,17 @@ async function prepareAndNotify(db: SupabaseClient, it: { id: string; user_id: s
     appUrl: `${siteUrl()}/applications/${appId}/packet`,
   });
   const { messageId } = await sendMessage(link.telegram_chat_id as number, card);
-  await db.from("hunt_items").update({
+  // The card is out: this write must land, or the item would look unsent. It stays claimed ('preparing') either way, so
+  // a failed write is retried and logged, never answered by sending the card again.
+  const done = () => db.from("hunt_items").update({
     state: "notified", application_id: appId, packet_id: state.packetId, content_hash: state.contentHash, confirmations: state.confirmations,
     channel: channel.kind, email_to: email?.to ?? null, email_subject: email?.subject ?? null, email_body: email?.body ?? null,
     research: research ?? null, telegram_message_id: messageId, notified_at: new Date().toISOString(), updated_at: new Date().toISOString(), error: null,
   }).eq("id", it.id);
+  const { error: e1 } = await done();
+  if (e1) {
+    const { error: e2 } = await done();
+    if (e2) console.error("hunter: card sent but not recorded", it.id, e2.message);
+  }
   return "notified";
 }

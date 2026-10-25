@@ -53,21 +53,27 @@ export async function POST(req: Request) {
         await syncCatalog(db);
         skills = await skillIdMap(db);
       }
-      for (const j of jobs) {
-        // SJSU-only (lib/scope.ts): off-campus cards from weekly round-ups are not imported.
-        if (SJSU_ONLY && !j.onCampus) {
-          report.offCampus++;
-          continue;
+      try {
+        for (const j of jobs) {
+          // SJSU-only (lib/scope.ts): off-campus cards from weekly round-ups are not imported.
+          if (SJSU_ONLY && !j.onCampus) {
+            report.offCampus++;
+            continue;
+          }
+          if (budget <= 0) {
+            report.limited++;
+            continue;
+          }
+          // The card's own line ("$18.45/hr • On Campus Student Employment • San Jose, CA (Onsite)") is all FRIDAY knows; the student opens the link for the rest.
+          const { jobId } = await importPosting(db, { url: j.url, title: j.title, company: j.employer ?? "Handshake employer", source: "handshake", onCampus: j.onCampus, description: j.meta, pay: j.payText ?? undefined }, skills!, userId);
+          budget--;
+          jobIds.push(jobId);
+          report.jobs++;
         }
-        if (budget <= 0) {
-          report.limited++;
-          continue;
-        }
-        // The card's own line ("$18.45/hr • On Campus Student Employment • San Jose, CA (Onsite)") is all FRIDAY knows; the student opens the link for the rest.
-        const { jobId } = await importPosting(db, { url: j.url, title: j.title, company: j.employer ?? "Handshake employer", source: "handshake", onCampus: j.onCampus, description: j.meta, pay: j.payText ?? undefined }, skills!, userId);
-        budget--;
-        jobIds.push(jobId);
-        report.jobs++;
+      } catch (e) {
+        // Half-imported: un-mark the message so the bridge's retry reads it again (imports are upserts, so no duplicates).
+        await db.from("handshake_mail").delete().eq("user_id", userId).eq("gmail_id", m.id);
+        throw e;
       }
       await db.from("handshake_mail").update({ jobs_found: jobs.length }).eq("user_id", userId).eq("gmail_id", m.id);
     }

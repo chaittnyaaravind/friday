@@ -57,6 +57,14 @@ export function fakeDb(seed: Record<string, Row[]> = {}) {
         in: (k: string, vs: unknown[]) => (filters.push((r) => vs.includes(value(name, r, k))), q),
         is: (k: string, v: null) => (filters.push((r) => (v === null ? value(name, r, k) == null : value(name, r, k) === v)), q),
         not: (k: string, _o: string, v: null) => (filters.push((r) => (v === null ? value(name, r, k) != null : value(name, r, k) !== v)), q),
+        // PostgREST or("a.is.null,a.neq.x"): the simple forms the app uses. SQL semantics: neq never matches null.
+        or: (expr: string) => {
+          const terms = expr.split(",").map((t) => /^([\w.]+)\.(is|eq|neq)\.(.*)$/.exec(t.trim())).filter((m): m is RegExpExecArray => Boolean(m));
+          return filters.push((r) => terms.some(([, k, op, v]) => {
+            const x = value(name, r, k);
+            return op === "is" ? (v === "null" ? x == null : String(x) === v) : op === "eq" ? x != null && String(x) === v : x != null && String(x) !== v;
+          })), q;
+        },
         lt: (k: string, v: unknown) => (cmp(k, v, (a, b) => a < b), q),
         lte: (k: string, v: unknown) => (cmp(k, v, (a, b) => a <= b), q),
         gt: (k: string, v: unknown) => (cmp(k, v, (a, b) => a > b), q),

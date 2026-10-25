@@ -11,6 +11,10 @@ describe("hallucinated fact detection", () => {
     expect(verdictOf(newFactsIn("Built a web app used by students", ev))).toBe("confirm");
     expect(verdictOf(newFactsIn("Launched a job-assistant web app with a Telegram bot", ev))).toBe("confirm");
     expect(verdictOf(newFactsIn("Created a job-assistant web app with a Telegram bot", ev))).toBe("ok");
+    // Ordinary words are not adoption claims.
+    expect(verdictOf(newFactsIn("Built a user-friendly job-assistant web app with client-side checks", "Built a job-assistant web app with checks"))).toBe("ok");
+    expect(verdictOf(newFactsIn("Greeted customers at the front desk", "Greeted patrons at the front desk"))).toBe("ok");
+    expect(verdictOf(newFactsIn("Built a web app with active users", ev))).toBe("confirm");
   });
 
   it("REJECTS an invented user count ('Built a website' → '…used by 50,000 users')", () => {

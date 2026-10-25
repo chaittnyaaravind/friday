@@ -16,10 +16,13 @@ vi.mock("@/lib/apply/packet-service", () => ({
 }));
 const moves = vi.hoisted(() => [] as { to: string; evidence?: string }[]);
 vi.mock("@/lib/apply/track", () => ({ moveStatus: async (_db: unknown, _u: string, _a: string, to: string, o: { evidence?: string } = {}) => void moves.push({ to, evidence: o.evidence }) }));
-const tg = vi.hoisted(() => ({ sent: [] as string[], docs: 0 }));
+const tg = vi.hoisted(() => ({ sent: [] as string[], docs: 0, failEdit: false }));
 vi.mock("@/lib/telegram/bot", () => ({
   sendMessage: async (_c: number, m: { text: string }) => (tg.sent.push(m.text), { messageId: 9 }),
-  editMessage: async (_c: number, _id: number, m: { text: string }) => void tg.sent.push(m.text),
+  editMessage: async (_c: number, _id: number, m: { text: string }) => {
+    if (tg.failEdit) throw new Error("Telegram editMessageText: message can't be edited");
+    tg.sent.push(m.text);
+  },
   sendDocument: async () => void tg.docs++,
 }));
 vi.mock("@/lib/resume/export", () => ({ renderPdf: async () => new Uint8Array([37, 80, 68, 70]) }));
@@ -50,6 +53,7 @@ beforeEach(() => {
   moves.length = 0;
   tg.sent = [];
   tg.docs = 0;
+  tg.failEdit = false;
 });
 
 describe("Approve", () => {
@@ -128,5 +132,24 @@ describe("Gmail bridge receipt", () => {
   it("another student's outbox row is not found", async () => {
     const { c } = withOutbox();
     await expect(recordSent(c, "u2", "o-1", { messageId: "x" })).rejects.toThrow("Not found");
+  });
+});
+
+describe("Approve: a Telegram failure after the commit point never re-opens the card", () => {
+  it("email job: the email stays queued and the card stays 'sending'", async () => {
+    tg.failEdit = true;
+    const { db, c } = world();
+    expect(await approve(c, await current(c), 42)).toMatch(/sending from your Gmail/);
+    expect(db.tables.hunt_items[0].state).toBe("sending");
+    expect(db.tables.outbox).toHaveLength(1);
+  });
+  it("site job: handed off once, resume sent once, a re-tap does nothing", async () => {
+    tg.failEdit = true;
+    const { db, c } = world(item({ channel: "site", email_to: null, email_subject: null, email_body: null }));
+    await approve(c, await current(c), 42);
+    expect(db.tables.hunt_items[0].state).toBe("handed_off");
+    expect(tg.docs).toBe(1);
+    expect(await approve(c, await current(c), 42)).toBe("Already handled.");
+    expect(tg.docs).toBe(1);
   });
 });

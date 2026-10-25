@@ -32,6 +32,8 @@ export async function loadItem(db: SupabaseClient, id: string): Promise<HuntItem
 
 const touch = (db: SupabaseClient, id: string, patch: Record<string, unknown>) => db.from("hunt_items").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", id);
 const note = (text: string): TgMessage => ({ text, buttons: [] });
+/** A Telegram call after the approval is committed: a failure is logged, never thrown (that would re-open the card). */
+const quietly = (p: Promise<unknown>): Promise<boolean> => p.then(() => true, (e) => (console.error("hunter: telegram after commit:", e instanceof Error ? e.message : e), false));
 
 async function jobTitle(db: SupabaseClient, item: HuntItem) {
   const { data } = await db.from("applications").select("job_title, company_name").eq("id", item.application_id ?? "").eq("user_id", item.user_id).maybeSingle();
@@ -83,19 +85,21 @@ async function approveClaimed(db: SupabaseClient, item: HuntItem & { application
       subject: item.email_subject, body: item.email_body, resume_version_id: versionId,
     });
     if (error && error.code !== "23505") throw error;
+    // Committed: the email is queued. From here a Telegram hiccup must never put the card back to "notified".
     await touch(db, item.id, { state: "sending" });
-    if (item.telegram_message_id) await editMessage(chatId, item.telegram_message_id, note(`✅ <b>Approved</b> — ${esc(title)} (${esc(employer)})\nYour Gmail bridge sends it to ${esc(item.email_to)} within about 5 minutes. You'll get a message when it's sent.`));
+    if (item.telegram_message_id) await quietly(editMessage(chatId, item.telegram_message_id, note(`✅ <b>Approved</b> — ${esc(title)} (${esc(employer)})\nYour Gmail bridge sends it to ${esc(item.email_to)} within about 5 minutes. You'll get a message when it's sent.`)));
     return "Approved — sending from your Gmail.";
   }
 
   const { url } = await handOff(db, item.user_id, item.application_id);
-  const pdf = versionId ? await resumePdf(db, item.user_id, versionId) : null;
-  // The resume is the point of the hand-off: its caption says what it is and where it goes, and a missing one is said.
-  if (pdf) await sendDocument(chatId, { name: pdf.name, bytes: pdf.bytes, type: "application/pdf" }, `📄 Your tailored resume for ${title}${employer ? ` (${employer})` : ""}.\nAttach this file to the application form: ${url}`);
-  if (item.telegram_message_id) await editMessage(chatId, item.telegram_message_id, note(`✅ <b>Approved</b> — ${esc(title)} (${esc(employer)})`));
-  await sendMessage(chatId, handOffNotice({ itemId: item.id, title, url, reason: pdf ? null : "⚠️ FRIDAY couldn't attach your resume here; download it in FRIDAY → Applications before you submit." }));
+  // Committed: the hand-off is recorded. Mark it before any Telegram call, so a failure below never re-opens the card.
   await touch(db, item.id, { state: "handed_off" });
-  return "Approved — resume and link sent.";
+  const pdf = versionId ? await resumePdf(db, item.user_id, versionId).catch(() => null) : null;
+  // The resume is the point of the hand-off: its caption says what it is and where it goes, and a missing one is said.
+  const attached = pdf ? await quietly(sendDocument(chatId, { name: pdf.name, bytes: pdf.bytes, type: "application/pdf" }, `📄 Your tailored resume for ${title}${employer ? ` (${employer})` : ""}.\nAttach this file to the application form: ${url}`)) : false;
+  if (item.telegram_message_id) await quietly(editMessage(chatId, item.telegram_message_id, note(`✅ <b>Approved</b> — ${esc(title)} (${esc(employer)})`)));
+  await quietly(sendMessage(chatId, handOffNotice({ itemId: item.id, title, url, reason: attached ? null : "⚠️ FRIDAY couldn't attach your resume here; download it in FRIDAY → Applications before you submit." })));
+  return attached ? "Approved — resume and link sent." : "Approved — open FRIDAY for your resume.";
 }
 
 export async function skip(db: SupabaseClient, item: HuntItem, chatId: number): Promise<string> {

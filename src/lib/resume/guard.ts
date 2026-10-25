@@ -52,7 +52,9 @@ const LEXICON: Lex[] = [
   ["award-winning", /\baward-?winning\b|\bwon\b|\bawarded\b/i, "scope"],
   // Found live 2026-10-25: an AI summary called private repositories "open-source tools".
   ["open-source / published", /\bopen-?\s?sourced?\b|\bpublicly (?:available|released)\b|\bpublished\b/i, "scope"],
-  ["users / adoption", /\b(?:used by|adopted by|users?|customers?|clients?|downloads?|installs?)\b/i, "outcome"],
+  // Adoption claims only: "used by", "adopted by", "N downloads", "active users". Plain "user-friendly", "client-side" or a
+  // front desk's "customers" are ordinary words, not a claim that people use the work.
+  ["users / adoption", /\b(?:used|adopted|downloaded|installed) by\b|\b(?:active|daily|monthly|weekly|paying|real) (?:users|customers)\b|\b(?:downloads|installs)\b/i, "outcome"],
   ["launched / released", /\b(?:launched|released|went live)\b/i, "outcome"],
   ["improved / increased", /\b(?:improv(?:ed|ing|es)|increas(?:ed|ing|es)|boost(?:ed|ing)|accelerat(?:ed|ing)|enhanc(?:ed|ing))\b/i, "outcome"],
   ["reduced / saved", /\b(?:reduc(?:ed|ing|es)|cut|saved|decreas(?:ed|ing)|eliminat(?:ed|ing)|minimi[sz](?:ed|ing))\b/i, "outcome"],

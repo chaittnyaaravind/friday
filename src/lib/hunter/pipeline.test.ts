@@ -83,3 +83,56 @@ describe("processQueue with no resume on the account", () => {
     expect(sent).toHaveLength(0);
   });
 });
+
+describe("processQueue fairness and claims", () => {
+  it("a student waiting on a resume never crowds out another student's items", async () => {
+    sent.length = 0;
+    jobs.splice(0, jobs.length);
+    const waiting = Array.from({ length: 15 }, (_, i) => ({ id: `w${i}`, user_id: "u1", job_id: `j${i}`, state: "queued", attempts: 0, error: NEEDS_RESUME, created_at: `2026-10-24T00:00:${String(i).padStart(2, "0")}Z` }));
+    const db = fakeDb({
+      hunter_links: [{ user_id: "u1", enabled: true, telegram_chat_id: 1 }, { user_id: "u2", enabled: true, telegram_chat_id: 2 }],
+      hunt_items: [...waiting, { id: "b1", user_id: "u2", job_id: "gone", state: "queued", attempts: 0, error: null, created_at: "2026-10-25T00:00:00Z" }],
+      candidate_items: [{ id: "c2", user_id: "u2", status: "user_confirmed" }],
+    });
+    const r = await processQueue(db as unknown as SupabaseClient, { deadline: Date.now() + 60_000 });
+    expect(r).toMatchObject({ stale: 1, waiting: 15 }); // u2's item was reached (and found closed)
+  });
+
+  it("releases waiting items in the same run once the student has resume facts", async () => {
+    jobs.splice(0, jobs.length);
+    const db = fakeDb({
+      hunter_links: [{ user_id: "u1", enabled: true, telegram_chat_id: 1 }],
+      hunt_items: [{ id: "h1", user_id: "u1", job_id: "gone", state: "queued", attempts: 0, error: NEEDS_RESUME, created_at: "2026-10-24T00:00:00Z" }],
+      candidate_items: [{ id: "c1", user_id: "u1", status: "user_added" }],
+    });
+    const r = await processQueue(db as unknown as SupabaseClient, { deadline: Date.now() + 60_000 });
+    expect(r).toMatchObject({ waiting: 0, stale: 1 });
+  });
+
+  it("skips an item another run already claimed, and frees a claim left by a crashed run", async () => {
+    jobs.splice(0, jobs.length);
+    const old = new Date(Date.now() - 20 * 60_000).toISOString();
+    const db = fakeDb({
+      hunter_links: [{ user_id: "u1", enabled: true, telegram_chat_id: 1 }],
+      hunt_items: [
+        { id: "live", user_id: "u1", job_id: "gone", state: "preparing", attempts: 0, error: null, created_at: "2026-10-24T00:00:00Z", updated_at: new Date().toISOString() },
+        { id: "dead", user_id: "u1", job_id: "gone2", state: "preparing", attempts: 0, error: null, created_at: "2026-10-24T00:00:01Z", updated_at: old },
+      ],
+      candidate_items: [{ id: "c1", user_id: "u1", status: "user_added" }],
+    });
+    const r = await processQueue(db as unknown as SupabaseClient, { deadline: Date.now() + 60_000 });
+    expect(r).toMatchObject({ stale: 1 }); // only the abandoned claim was re-queued and prepared
+    expect(db.tables.hunt_items.find((i) => i.id === "live")!.state).toBe("preparing");
+  });
+});
+
+describe("bridgeLive", () => {
+  it("is connected only when the Apps Script checked in within two hours", async () => {
+    const { bridgeLive } = await import("./pipeline");
+    const now = Date.parse("2026-10-25T12:00:00Z");
+    expect(bridgeLive({ bridge_token_hash: "h", bridge_seen_at: "2026-10-25T11:00:00Z" }, now)).toBe(true);
+    expect(bridgeLive({ bridge_token_hash: "h", bridge_seen_at: null }, now)).toBe(false);
+    expect(bridgeLive({ bridge_token_hash: "h", bridge_seen_at: "2026-10-25T09:00:00Z" }, now)).toBe(false);
+    expect(bridgeLive({ bridge_token_hash: null, bridge_seen_at: "2026-10-25T11:59:00Z" }, now)).toBe(false);
+  });
+});

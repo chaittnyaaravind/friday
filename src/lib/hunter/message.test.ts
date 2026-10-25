@@ -75,3 +75,19 @@ describe("huntCard shows the AI rewrites and the posting's screens", () => {
     expect(card.text).toContain("🧾 ATS parse test passed (1 page · 6 sections · 20 lines read back intact)");
   });
 });
+
+describe("buttons Telegram would reject are dropped, never the message", () => {
+  it("a mailto: apply link and a relative app URL become no buttons; the link stays in the text", async () => {
+    const { huntCard, handOffNotice } = await import("./message");
+    const card = huntCard({
+      itemId: "00000000-0000-4000-8000-000000000001",
+      job: { title: "Desk", employer: "SJSU", payText: null, physical: "low", physicalWhy: [], deskWhy: [], source: "x", url: "mailto:desk@sjsu.edu", deadline: null },
+      score: null, research: null, resume: null, channel: { kind: "site", reason: "x", needs: [] }, email: null, confirmations: [], blockers: [], appUrl: "/applications/a/packet",
+    });
+    expect(card.buttons.flat().every((b) => !b.url)).toBe(true);
+    expect(card.buttons.flat().map((b) => b.text)).toEqual(["⏭ Skip"]);
+    const h = handOffNotice({ itemId: "i", title: "Desk", url: "mailto:desk@sjsu.edu", reason: null });
+    expect(h.buttons.flat().map((b) => b.text)).toEqual(["📨 I applied"]);
+    expect(h.text).toContain("Apply here: mailto:desk@sjsu.edu");
+  });
+});

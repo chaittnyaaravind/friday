@@ -28,6 +28,17 @@ export type HuntCard = {
 };
 
 const MAX = 4000;
+/** Telegram rejects a whole message if any button URL is not absolute http(s) (a mailto: apply link, an unset site URL). */
+export const buttonUrl = (u: string | null | undefined): string | null => {
+  try {
+    const url = new URL(u ?? "");
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
+};
+/** Rows with any unusable URL button dropped from them; empty rows removed. */
+const safeRows = (rows: Button[][]): Button[][] => rows.map((r) => r.filter((b) => !b.url || buttonUrl(b.url))).filter((r) => r.length);
 export const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
@@ -80,7 +91,7 @@ export function huntCard(c: HuntCard): TgMessage {
   if (!c.blockers.length && c.resume) buttons.push([{ text: c.channel.kind === "email" ? "✅ Approve & send" : "✅ Approve", data: `ap:${c.itemId}` }]);
   buttons.push([{ text: "📄 Review in FRIDAY", url: c.appUrl }, ...(c.job.url ? [{ text: "🔗 Posting", url: c.job.url }] : [])]);
   buttons.push([{ text: "⏭ Skip", data: `sk:${c.itemId}` }]);
-  return { text, buttons };
+  return { text, buttons: safeRows(buttons) };
 }
 
 export const sentNotice = (o: { title: string; employer: string; to: string; at: string }): TgMessage => ({
@@ -89,8 +100,8 @@ export const sentNotice = (o: { title: string; employer: string; to: string; at:
 });
 
 export const handOffNotice = (o: { itemId: string; title: string; url: string; reason: string | null }): TgMessage => ({
-  text: `👍 Approved — ${esc(o.title)}\nYour tailored resume is attached.${o.reason ? `\n${esc(o.reason)}` : ""}\nSubmit on the official page, then tap “I applied”.`,
-  buttons: [[{ text: "🔗 Open the application", url: o.url }], [{ text: "📨 I applied", data: `dn:${o.itemId}` }]],
+  text: `👍 Approved — ${esc(o.title)}\nYour tailored resume is attached.${o.reason ? `\n${esc(o.reason)}` : ""}\nSubmit on the official page, then tap “I applied”.${buttonUrl(o.url) ? "" : `\nApply here: ${esc(o.url)}`}`,
+  buttons: safeRows([[{ text: "🔗 Open the application", url: o.url }], [{ text: "📨 I applied", data: `dn:${o.itemId}` }]]),
 });
 
 export type OpenJob = { id: string; title: string; company: string; deadline: string | null; desk: boolean };
@@ -106,5 +117,5 @@ export function openJobsNotice(o: { open: number; desk: number; byEmployer: { co
     for (const j of desk.slice(0, 15)) L.push(`• <a href="${esc(`${appUrl}/jobs/${j.id}`)}">${esc(clip(j.title, 70))}</a> · ${esc(j.company.replace(/^SJSU /, ""))}${j.deadline ? ` · by ${esc(j.deadline.slice(0, 10))}` : ""}`);
   }
   L.push("", "Counted from SJSU's official hiring pages FRIDAY reads every 5 minutes. Handshake-only postings arrive through your alert emails.");
-  return { text: clip(L.join("\n"), MAX), buttons: [[{ text: "Open SJSU jobs in FRIDAY", url: `${appUrl}/sjsu` }]] };
+  return { text: clip(L.join("\n"), MAX), buttons: safeRows([[{ text: "Open SJSU jobs in FRIDAY", url: `${appUrl}/sjsu` }]]) };
 }

@@ -26,7 +26,11 @@ export async function GET(req: Request) {
     if (error) throw error;
     const out = [];
     for (const r of rows ?? []) {
-      const { data: claimed } = await db.from("outbox").update({ state: "claimed", claimed_at: new Date().toISOString() }).eq("id", r.id).eq("state", r.state).select("id");
+      // Compare-and-swap: a stale claim is taken over only if nobody re-claimed it since it was read (same claimed_at), so
+      // two overlapping bridge runs can never both send the same application.
+      let take = db.from("outbox").update({ state: "claimed", claimed_at: new Date().toISOString() }).eq("id", r.id).eq("state", r.state);
+      if (r.state === "claimed") take = take.eq("claimed_at", r.claimed_at as string);
+      const { data: claimed } = await take.select("id");
       if (!claimed?.length) continue;
       const pdf = r.resume_version_id ? await resumePdf(db, userId, r.resume_version_id as string) : null;
       out.push({ id: r.id, to: r.to_email, subject: r.subject, body: r.body, attachment: pdf ? { name: pdf.name, type: "application/pdf", base64: Buffer.from(pdf.bytes).toString("base64") } : null });

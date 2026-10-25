@@ -247,6 +247,8 @@ export async function loadActiveJobsForMatching(db: SupabaseClient, onlyIds?: st
       .eq("status", "active")
       // Excluded jobs (exclusions.ts) are never scored, ranked or alerted on.
       .is("excluded_reason", null)
+      // A stable order: pages of an unordered query can skip or repeat rows once there are more than pageSize jobs.
+      .order("id")
       .range(from, from + pageSize - 1);
     if (onlyIds) q = q.in("id", onlyIds);
     const { data, error } = await q;

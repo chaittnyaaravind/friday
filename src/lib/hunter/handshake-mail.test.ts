@@ -53,3 +53,10 @@ describe("parseHandshakeAlert on a REAL Handshake saved-search alert (redacted)"
     expect(parseHandshakeAlert(off)[1]).toMatchObject({ employer: "CodeNinjas Livermore", onCampus: false });
   });
 });
+
+describe("parseHandshakeAlert: 'View job' buttons", () => {
+  it("takes the title from the last block before the button, not every block run together", () => {
+    const html = '<p>San José State University</p><p>IT Help Desk Technician</p><a href="https://app.joinhandshake.com/jobs/1234567">View job</a>';
+    expect(parseHandshakeAlert(html).map((j) => j.title)).toEqual(["IT Help Desk Technician"]);
+  });
+});
