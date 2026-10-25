@@ -60,6 +60,10 @@ describe("close guard", () => {
   });
   it("allows when nothing would be closed, even for an empty feed", () => {
     expect(closeDecision({ returned: 0, activeBefore: 0, candidates: 0 })).toEqual({ allow: true });
+    // Details left out this run: "not seen" proves nothing, so nothing closes.
+    expect(closeDecision({ returned: 5, incomplete: true, activeBefore: 5, candidates: 1 })).toEqual({ allow: false, reason: "incomplete_feed" });
+    // A feed of staff-only jobs (student filter leaves none) is healthy: its one ended student listing may close.
+    expect(closeDecision({ returned: 12, activeBefore: 1, candidates: 1 })).toEqual({ allow: true });
   });
   it("REFUSES when the feed returned nothing but we hold active listings from it (empty_feed)", () => {
     expect(closeDecision({ returned: 0, activeBefore: 3, candidates: 3 })).toEqual({ allow: false, reason: "empty_feed" });

@@ -22,7 +22,7 @@ import { archiveExpired, closeStale, normalizePosting, upsertJobs, type Normaliz
 import type { ProviderMetrics } from "./providers";
 import { REGISTRY } from "./registry";
 import { SJSU_ONLY } from "@/lib/scope";
-import { ADAPTERS, usajobsConfigured, type CompanyFeed, type SourceKind } from "./sources";
+import { ADAPTERS, feedMeta, usajobsConfigured, type CompanyFeed, type RawPosting, type SourceKind } from "./sources";
 
 type CompanyRow = { id: string; slug: string; name: string; ats: string | null; ats_config: Record<string, string>; discoverable: boolean; last_crawled_at: string | null };
 
@@ -164,6 +164,7 @@ export async function runDiscovery(
         const feed: CompanyFeed = { slug: c.slug, name: c.name, ats: c.ats as SourceKind, config: c.ats_config };
         const postings = await adapter(feed);
         report.seen += postings.length;
+        await reuseLastGoodDetail(db, postings);
         const kept: NormalizedJob[] = [];
         for (const p of postings) {
           const n = normalizePosting(p, c);
@@ -183,7 +184,9 @@ export async function runDiscovery(
         report.reopened += up.reopened.length;
         if (baseline) report.baseline += up.created.length;
         report.newJobIds.push(...up.created);
-        const close = await closeStale(db, c.id, c.ats!, startedAt, { returned: postings.length, runId: run.id });
+        // The adapter's own view of its feed: the count BEFORE its student filter, and whether details were left out.
+        const info = feedMeta(postings);
+        const close = await closeStale(db, c.id, c.ats!, startedAt, { returned: info.total, incomplete: info.incomplete, runId: run.id });
         report.closed += close.closed;
         if (close.blocked) report.closeBlocked.push({ company: c.slug, source: c.ats!, reason: close.blocked, candidates: close.candidates, active: close.activeBefore });
         await db.from("companies").update({ last_crawled_at: new Date().toISOString() }).eq("id", c.id);
@@ -463,4 +466,19 @@ export async function raiseReminders(db: SupabaseClient) {
     ...interviewNotes.filter((n) => wants(n.user_id as string, "interviews")),
   ];
   if (all.length) await db.from("notifications").upsert(all, { onConflict: "user_id,dedupe_key", ignoreDuplicates: true });
+}
+
+/**
+ * A posting whose detail could not be read this run (sources.ts detailUnread) keeps the description, apply link and pay
+ * FRIDAY read last time, so one failed fetch never replaces a real Google Form link or description with a stub.
+ */
+async function reuseLastGoodDetail(db: SupabaseClient, postings: RawPosting[]) {
+  for (const p of postings.filter((x) => x.detailUnread)) {
+    const { data } = await db.from("job_sources").select("jobs(description, apply_url, pay_text)").eq("source", p.source).eq("external_id", p.externalId).maybeSingle();
+    const prev = (data?.jobs ?? null) as { description: string | null; apply_url: string | null; pay_text: string | null } | null;
+    if (!prev?.description) continue; // never read before: the stub is all there is
+    p.description = prev.description;
+    if (prev.apply_url) p.applyUrl = prev.apply_url;
+    if (prev.pay_text) p.payText = prev.pay_text;
+  }
 }

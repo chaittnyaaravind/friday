@@ -16,6 +16,7 @@ import { hourlyFromPay } from "@/lib/domain/campus-fit";
 import { exclusionColumn, staffReason } from "@/lib/domain/exclusions";
 import { parseHours } from "@/lib/domain/hours";
 import { assessPhysical } from "@/lib/domain/physical";
+import { companySlug } from "./dedupe";
 import { closeDecision, type CloseBlock } from "./close-guard";
 import { privateCanonical, privateCompanySlug, privateExternalId } from "./import-scope";
 import { AGGREGATOR_SOURCES } from "./providers";
@@ -232,7 +233,7 @@ export async function closeStale(
   companyId: string,
   source: string,
   runStartedAt: string,
-  opts: { returned?: number; runId?: string | null } = {},
+  opts: { returned?: number; incomplete?: boolean; runId?: string | null } = {},
 ): Promise<CloseResult> {
   const { data: rows, error } = await db
     .from("job_sources")
@@ -253,7 +254,7 @@ export async function closeStale(
   const stale = [...seenThisRun].filter(([, seen]) => !seen).map(([id]) => id);
   if (!stale.length) return { closed: 0, blocked: null, activeBefore, candidates: 0 };
 
-  const decision = closeDecision({ returned: opts.returned, activeBefore, candidates: stale.length });
+  const decision = closeDecision({ returned: opts.returned, incomplete: opts.incomplete, activeBefore, candidates: stale.length });
   if (!decision.allow) return { closed: 0, blocked: decision.reason, activeBefore, candidates: stale.length };
 
   const { data: closedRows, error: upErr } = await db
@@ -313,7 +314,8 @@ const AGGREGATOR = /(?:^|\.)(?:linkedin\.com|indeed\.com|joinhandshake\.com|glas
  */
 export async function importPosting(db: SupabaseClient, input: ImportInput, skillIds: Map<string, number>, userId: string) {
   const host = new URL(input.url).hostname;
-  const baseSlug = input.onCampus ? "sjsu-handshake" : input.company.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  // The same slug rule as the aggregators (dedupe.ts): "NVIDIA Corporation" is the public "nvidia", not a private copy.
+  const baseSlug = input.onCampus ? "sjsu-handshake" : companySlug(input.company) || input.company.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "employer";
 
   // Prefer the public company with this slug so the listing groups with the employer's real page;
   // otherwise the company is private to this student.
@@ -344,7 +346,10 @@ export async function importPosting(db: SupabaseClient, input: ImportInput, skil
   const role = classifyRole(input.title, { onCampus: input.onCampus });
   const loc = resolveLocation(input.onCampus ? "San Jose, CA" : input.location ?? "");
   const text = input.description ?? "";
-  const pay = parsePay(input.pay ?? text);
+  // As in normalizePosting: a stated pay field, else only a figure WITH a unit from the prose ("$18.50 per hour");
+  // a bare "$500 relocation stipend" is never pay.
+  const fromText = input.pay ? null : parsePay(text);
+  const pay = parsePay(input.pay) ?? (fromText?.unit ? fromText : null);
   const hours = parseHours(text);
   const hourly = hourlyFromPay(pay);
   const physical = assessPhysical(text);

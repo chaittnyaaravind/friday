@@ -302,6 +302,16 @@ describe("SJSU depth — real Student Union feed and Peer Connections page throu
     await importPosting(idb as never, { url: "https://sjsu.joinhandshake.com/jobs/123", title: "Lab Assistant", company: "SJSU", description: "Help in the chemistry lab. Up to 20 hours per week. $18 an hour.", source: "handshake", onCampus: true }, new Map(), "user-1");
     expect(idb.tables.jobs[0]).toMatchObject({ campus_roles: ["lab_assistant", "student_assistant"], campus_employer: "other", hours_max: 20, hours_text: "Up to 20 hrs/week", pay_text: "$18/hr", is_on_campus: true, imported_by: "user-1" });
   });
+  it("an import's prose never turns a bare dollar figure into pay", async () => {
+    const idb = fakeDb({ companies: [], jobs: [], job_sources: [], job_requirements: [] });
+    await importPosting(idb as never, { url: "https://sjsu.joinhandshake.com/jobs/124", title: "Office Assistant", company: "SJSU", description: "Includes a $500 relocation stipend.", source: "handshake", onCampus: true }, new Map(), "user-1");
+    expect(idb.tables.jobs[0]).toMatchObject({ pay_text: null });
+  });
+  it("an off-campus import joins the public employer even with a legal suffix", async () => {
+    const idb = fakeDb({ companies: [{ id: "c-nv", slug: "nvidia", name: "NVIDIA", imported_by: null }], jobs: [], job_sources: [], job_requirements: [] });
+    await importPosting(idb as never, { url: "https://www.linkedin.com/jobs/view/1", title: "Software Intern", company: "NVIDIA Corporation", source: "linkedin", onCampus: false }, new Map(), "user-1");
+    expect(idb.tables.jobs[0]).toMatchObject({ company_id: "c-nv" });
+  });
 });
 
 // ───────────────────────── match v2 through the pipeline ─────────────────────────

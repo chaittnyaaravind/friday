@@ -196,3 +196,15 @@ describe("the truth check and terminology together", () => {
     expect(validateDoc(d, ITEMS).ok).toBe(false);
   });
 });
+
+describe("recorded respellings survive a save, and only true respellings are honoured", () => {
+  it("DocSchema keeps a line's terms", async () => {
+    const { DocSchema } = await import("./doc-schema");
+    const doc = { version: 1, header: { name: "A", contact: [], origin: "profile" }, sections: [{ id: "s", kind: "skills", title: "Skills", entries: [], lines: [{ id: "l", text: "Node.js", origin: "profile", sourceItemId: null, terms: [{ from: "nodejs", to: "Node.js" }] }] }] };
+    expect(DocSchema.parse(doc).sections[0].lines[0].terms).toEqual([{ from: "nodejs", to: "Node.js" }]);
+  });
+  it("undoes a respelling of one skill; ignores a pair naming two different skills", () => {
+    expect(undoTerms("Built APIs in Node.js", [{ from: "nodejs", to: "Node.js" }])).toBe("Built APIs in nodejs");
+    expect(undoTerms("Deployed with Kubernetes", [{ from: "nodejs", to: "Kubernetes" }])).toBe("Deployed with Kubernetes");
+  });
+});

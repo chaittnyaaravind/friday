@@ -59,7 +59,12 @@ export function sameSkill(a: string, b: string): boolean {
 /** The line as the student's profile wrote it: every recorded rename undone. */
 export function undoTerms(text: string, terms: TermChange[] | undefined): string {
   let t = text;
-  for (const c of [...(terms ?? [])].reverse()) t = t.replace(wordRe(c.to, "g"), c.from);
+  // Only a true respelling of ONE skill ("nodejs" → "Node.js") is undone. A recorded pair arrives with the document, so a
+  // pair naming two different skills ("nodejs" → "Kubernetes") is ignored and the line is checked as written.
+  for (const c of [...(terms ?? [])].reverse()) {
+    const a = resolveSkill(c.from);
+    if (a && a === resolveSkill(c.to)) t = t.replace(wordRe(c.to, "g"), c.from);
+  }
   return t;
 }
 

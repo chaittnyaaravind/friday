@@ -10,7 +10,7 @@ import { campusEmployerOf } from "@/lib/domain/campus";
 import { parseHours } from "@/lib/domain/hours";
 import { parsePay } from "@/lib/domain/normalize";
 import { REGISTRY } from "./registry";
-import { acrobatPdfUrl, ADAPTERS, applicationLink, adpStudentPosting, applicationWindow, isCampusTitle, mapAdpRequisition, parseRecruitmentPage, parseWindowPage, SourceError, STUDENT_TITLE, usable, type CompanyFeed } from "./sources";
+import { acrobatPdfUrl, ADAPTERS, applicationLink, feedMeta, withFeed, adpStudentPosting, applicationWindow, isCampusTitle, mapAdpRequisition, parseRecruitmentPage, parseWindowPage, SourceError, STUDENT_TITLE, usable, type CompanyFeed } from "./sources";
 
 const dir = new URL("../../../test/fixtures/sources/", import.meta.url);
 const json = <T>(file: string): T => JSON.parse(readFileSync(new URL(file, dir), "utf8")) as T;
@@ -602,6 +602,8 @@ describe("sjsu_page window mode (live University Housing page)", () => {
   });
   it("after the window closes: nothing", () => {
     expect(parseWindowPage(housingHtml, housing, at("2027-01-26T20:00:00Z"))).toEqual([]);
+    // Past the window is a real "closed", not a broken feed: the close guard must let the listings close.
+    expect(feedMeta(parseWindowPage(housingHtml, housing, at("2027-01-26T20:00:00Z"))).total).toBe(1);
   });
   it("a configured role the page no longer names is not emitted", () => {
     const out = parseWindowPage(housingHtml, feed("sjsu_page", "SJSU University Housing Services", { url, mode: "window", roles: "Community Desk Assistant (CDA/ECDA)|Night Owl Monitor" }), at("2026-11-03T18:00:00Z"));
@@ -667,5 +669,14 @@ describe("applicationLink (where a job description PDF says to apply)", () => {
   it("never picks a non-form host, a Google Doc that is not a form, a PDF, or plain http", () => {
     expect(applicationLink(it2, ["https://evil.example/apply", "https://docs.google.com/document/d/x", "https://www.sjsu.edu/hr/jd.pdf", "http://forms.gle/x"])).toBeNull();
     expect(applicationLink("No instructions here.")).toBeNull();
+  });
+});
+
+describe("feedMeta", () => {
+  it("defaults to the returned count, and carries a pre-filter total and incompleteness when set", () => {
+    expect(feedMeta([])).toEqual({ total: 0, incomplete: false });
+    const list = withFeed([], { total: 7 });
+    expect(feedMeta(list)).toEqual({ total: 7, incomplete: false });
+    expect(feedMeta(withFeed(list, { incomplete: true }))).toEqual({ total: 7, incomplete: true });
   });
 });

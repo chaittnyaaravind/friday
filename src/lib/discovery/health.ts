@@ -58,7 +58,9 @@ export async function recordSourceRun(db: SupabaseClient, key: HealthKey, outcom
   try {
     const { data: prev } = await db.from("source_health").select("*").eq("source", key.source).eq("scope", key.scope).maybeSingle();
     const row = nextHealth((prev as HealthRow | null) ?? null, key, outcome, now);
-    const { error } = await db.from("source_health").upsert(row, { onConflict: "source,scope" });
+    let { error } = await db.from("source_health").upsert(row, { onConflict: "source,scope" });
+    // Before migration 0021 the reason column only allows 'empty_feed' | 'mass_close': keep the health row current anyway.
+    if (error?.code === "23514" && row.close_blocked_reason) ({ error } = await db.from("source_health").upsert({ ...row, close_blocked_reason: null }, { onConflict: "source,scope" }));
     if (error) throw error;
   } catch (e) {
     console.error(JSON.stringify({ event: "source_health_failed", source: key.source, scope: key.scope, error: e instanceof Error ? e.message : String(e) }));

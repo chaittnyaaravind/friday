@@ -46,13 +46,17 @@ export async function tailorResume(db: SupabaseClient, userId: string, input: Ta
     return { proposal, terminology: changes, ai: ai.changes, aiNote: ai.note };
   }
 
-  // Only exclusions of items that exist in the profile are honoured.
-  const exclude = (input.exclude ?? []).filter((id) => items.some((i) => i.id === id));
+  // Only exclusions of items that exist in the profile are honoured. With none given (the Auto Hunter), the proposal's own
+  // exclusions apply, so the resume matches what the preview and the report say was left out.
+  const exclude = (input.exclude ?? proposal.options.exclude).filter((id) => items.some((i) => i.id === id));
   const { doc: spelled, changes: terminology } = applyTerminology(buildTailored(items, proposal, exclude), jobText);
   let { doc, changes: ai } = await rewrite(spelled);
+  let check = validateDoc(doc, items);
   // Belt and braces: if the AI version fails verification for any reason, fall back to the verified deterministic one.
-  if (ai.length && !validateDoc(doc, items).ok) ({ doc, ai } = { doc: spelled, ai: [] });
-  const check = validateDoc(doc, items);
+  if (ai.length && !check.ok) {
+    ({ doc, ai } = { doc: spelled, ai: [] });
+    check = validateDoc(doc, items);
+  }
   if (!check.ok) throw new HttpError(422, `Tailored resume failed verification: ${check.issues[0].claim}`);
 
   const master = await loadMaster(db, userId);

@@ -28,6 +28,8 @@ export type RawPosting = {
   payText: string | null;
   isRemoteHint: boolean;
   onCampus: boolean;
+  /** The posting's detail (e.g. its description PDF) could not be read this run: reuse the last good copy, never the stub. */
+  detailUnread?: boolean;
   /**
    * Source-specific raw values kept verbatim for audit (e.g. Workday's `startDate` and its "Posted 30+ Days Ago" text).
    * They are data, never a business rule: nothing derives freshness or eligibility from them until the source's
@@ -80,6 +82,21 @@ export function usable<T>(items: unknown, isUsable: (x: T) => boolean, what: str
 }
 
 /** Cheap title pre-filter so we only pull full descriptions for plausible student roles. */
+/**
+ * What an adapter knows about its own feed beyond the postings it returns (close-guard.ts needs both):
+ *   total       postings the source listed BEFORE FRIDAY's student filter (a feed with only staff jobs is not "empty")
+ *   incomplete  some posting's details could not be read, so it was left out: this run must not close anything
+ * Kept beside the array (not on it) so RawPosting[] stays a plain array everywhere else.
+ */
+export type FeedMeta = { total: number; incomplete: boolean };
+const FEED_META = new WeakMap<RawPosting[], FeedMeta>();
+export const withFeed = (list: RawPosting[], meta: Partial<FeedMeta>): RawPosting[] => {
+  const prev = FEED_META.get(list);
+  FEED_META.set(list, { total: meta.total ?? prev?.total ?? list.length, incomplete: Boolean(meta.incomplete ?? prev?.incomplete) });
+  return list;
+};
+export const feedMeta = (list: RawPosting[]): FeedMeta => FEED_META.get(list) ?? { total: list.length, incomplete: false };
+
 export const STUDENT_TITLE = /\b(?:intern(?:ship)?s?|co-?op|new grad(?:uate)?|university grad(?:uate)?|early career|entry[- ]level|student|apprentice|campus|graduate program)\b/i;
 
 // ───────────────────────── Greenhouse ─────────────────────────
@@ -92,7 +109,7 @@ async function greenhouse(c: CompanyFeed): Promise<RawPosting[]> {
   const url = `https://boards-api.greenhouse.io/v1/boards/${c.config.token}/jobs?content=true`;
   const raw = await getJSON<{ jobs: GHJob[] }>(url);
   const jobs = usable<GHJob>(raw?.jobs, (j) => j.id != null && has(j.title) && has(j.absolute_url), "jobs", url);
-  return jobs
+  return withFeed(jobs
     .filter((j) => STUDENT_TITLE.test(j.title))
     .map((j) => {
       const description = htmlToText(decodeEntities(j.content ?? ""));
@@ -114,7 +131,7 @@ async function greenhouse(c: CompanyFeed): Promise<RawPosting[]> {
         isRemoteHint: /remote/i.test(j.location?.name ?? ""),
         onCampus: false,
       };
-    });
+    }), { total: jobs.length });
 }
 
 // ───────────────────────── Lever ─────────────────────────
@@ -127,7 +144,7 @@ type LeverJob = {
 async function lever(c: CompanyFeed): Promise<RawPosting[]> {
   const url = `https://api.lever.co/v0/postings/${c.config.token}?mode=json`;
   const jobs = usable<LeverJob>(await getJSON<LeverJob[]>(url), (j) => has(j.id) && has(j.text) && has(j.hostedUrl) && typeof j.categories === "object" && j.categories !== null, "postings", url);
-  return jobs
+  return withFeed(jobs
     .filter((j) => STUDENT_TITLE.test(j.text) || /intern/i.test(j.categories.commitment ?? ""))
     .map((j) => {
       const lists = (j.lists ?? []).map((l) => `${l.text}\n${htmlToText(l.content)}`).join("\n\n");
@@ -151,7 +168,7 @@ async function lever(c: CompanyFeed): Promise<RawPosting[]> {
         isRemoteHint: j.workplaceType === "remote" || /remote/i.test(loc),
         onCampus: false,
       };
-    });
+    }), { total: jobs.length });
 }
 
 // ───────────────────────── Ashby ─────────────────────────
@@ -165,7 +182,7 @@ async function ashby(c: CompanyFeed): Promise<RawPosting[]> {
   const url = `https://api.ashbyhq.com/posting-api/job-board/${c.config.token}?includeCompensation=true`;
   const raw = await getJSON<{ jobs: AshbyJob[] }>(url);
   const jobs = usable<AshbyJob>(raw?.jobs, (j) => has(j.id) && has(j.title) && has(j.jobUrl), "jobs", url);
-  return jobs
+  return withFeed(jobs
     .filter((j) => STUDENT_TITLE.test(j.title) || /intern/i.test(j.employmentType ?? ""))
     .map((j) => {
       const loc = [j.location, ...(j.secondaryLocations ?? []).map((s) => s.location)].filter(Boolean).join("; ");
@@ -186,7 +203,7 @@ async function ashby(c: CompanyFeed): Promise<RawPosting[]> {
         isRemoteHint: Boolean(j.isRemote) || j.workplaceType === "Remote",
         onCampus: false,
       };
-    });
+    }), { total: jobs.length });
 }
 
 // ───────────────────────── SmartRecruiters ─────────────────────────
@@ -195,10 +212,12 @@ type SRDetail = { applyUrl?: string; postingUrl?: string; jobAd?: { sections?: R
 async function smartrecruiters(c: CompanyFeed): Promise<RawPosting[]> {
   const id = encodeURIComponent(c.config.token);
   const out: RawPosting[] = [];
+  let listed = 0;
   for (const q of ["intern", "new grad", "student"]) {
     const listUrl = `https://api.smartrecruiters.com/v1/companies/${id}/postings?q=${encodeURIComponent(q)}&limit=100&country=us`;
     const raw = await getJSON<SRList>(listUrl);
     const content = usable<SRList["content"][number]>(raw?.content, (p) => has(p.id) && has(p.name) && typeof p.location === "object" && p.location !== null, "postings", listUrl);
+    listed += content.length;
     for (const p of content) {
       if (!STUDENT_TITLE.test(p.name) || out.some((o) => o.externalId.endsWith(p.id))) continue;
       const d = await getJSON<SRDetail>(`https://api.smartrecruiters.com/v1/companies/${id}/postings/${p.id}`).catch(() => null);
@@ -223,10 +242,12 @@ async function smartrecruiters(c: CompanyFeed): Promise<RawPosting[]> {
         payText: payFromText(description),
         isRemoteHint: Boolean(p.location.remote),
         onCampus: false,
+        // An unreadable detail keeps the posting (public URL, no invented text); agent.ts restores its last good copy.
+        ...(d ? {} : { detailUnread: true }),
       });
     }
   }
-  return out;
+  return withFeed(out, { total: listed });
 }
 
 // ───────────────────────── Pinpoint ─────────────────────────
@@ -263,7 +284,7 @@ async function pinpoint(c: CompanyFeed): Promise<RawPosting[]> {
   const raw = await getJSON<{ data: PinpointPosting[] }>(url);
   const items = usable<PinpointPosting>(raw?.data, (p) => has(p.id) && has(p.title) && has(p.url), "postings", url);
   const campus = c.config.campus === "1";
-  return items
+  return withFeed(items
     .filter((p) => !campus || isStudentPosting(p))
     .map((p) => {
       const section = (head: string | undefined, body: string | undefined) => (body ? `${head ?? ""}\n${htmlToText(decodeEntities(body))}`.trim() : "");
@@ -292,7 +313,7 @@ async function pinpoint(c: CompanyFeed): Promise<RawPosting[]> {
         isRemoteHint: p.workplace_type === "remote",
         onCampus: campus,
       };
-    });
+    }), { total: items.length });
 }
 
 // ───────────────────────── Workday ─────────────────────────
@@ -318,6 +339,7 @@ async function workday(c: CompanyFeed): Promise<RawPosting[]> {
   const api = `${base}/wday/cxs/${tenant}/${site}`;
   const seen = new Map<string, WDList["jobPostings"][number]>();
   const listUrl = `${api}/jobs`;
+  let listed = 0;
   for (const searchText of campus ? ["student", "assistant", "research", "intern"] : ["intern", "university graduate", "student"]) {
     // OBSERVED (2026-09-27, NVIDIA): Workday returns `total` ONLY on the first page (offset 0); later pages report
     // total 0 while still returning postings. The first page's total is therefore the one that bounds the loop.
@@ -330,6 +352,7 @@ async function workday(c: CompanyFeed): Promise<RawPosting[]> {
       });
       const postings = usable<WDList["jobPostings"][number]>(page?.jobPostings, (p) => has(p.title) && has(p.externalPath), "job postings", listUrl);
       if (offset === 0) total = Number.isFinite(page.total) ? page.total : 0;
+      listed += postings.length;
       for (const p of postings) {
         const keep = campus ? isCampusTitle(p.title) : STUDENT_TITLE.test(p.title) && WD_US.test(p.locationsText ?? "");
         if (keep) seen.set(p.externalPath, p);
@@ -338,10 +361,11 @@ async function workday(c: CompanyFeed): Promise<RawPosting[]> {
     }
   }
   const out: RawPosting[] = [];
+  let incomplete = false;
   for (const [path, p] of seen) {
     const d = await getJSON<WDDetail>(`${api}${path}`).catch(() => null);
     const info = d?.jobPostingInfo;
-    if (!info || !has(info.title)) continue; // a detail we cannot read is skipped, never guessed
+    if (!info || !has(info.title)) { incomplete = true; continue; } // a detail we cannot read is skipped, never guessed, and the run closes nothing
     const loc = [info.location, ...(info.additionalLocations ?? [])].filter(Boolean).join("; ");
     const description = htmlToText(info.jobDescription);
     const url = info.externalUrl ?? `${base}/en-US/${site}${path}`;
@@ -367,7 +391,7 @@ async function workday(c: CompanyFeed): Promise<RawPosting[]> {
       onCampus: campus,
     });
   }
-  return out;
+  return withFeed(out, { total: Math.max(listed, out.length), incomplete });
 }
 
 // ───────────────────────── Official SJSU pages ─────────────────────────
@@ -412,14 +436,15 @@ const isoDate = (y: number, monthIndex: number, d: number): string | null => {
 export function parseRecruitmentPage(html: string, c: CompanyFeed, now: number): RawPosting[] {
   const main = html.match(/<main[\s\S]*?<\/main>/i)?.[0] ?? html;
   const text = htmlToText(main).replace(/\s+/g, " ");
-  if (!OPEN_RE.test(text)) return [];
+  // An empty result from a page that parsed is a real answer (not open / past due), not a broken feed: total 1.
+  if (!OPEN_RE.test(text)) return withFeed([], { total: 1 });
 
   const today = todayISODate(now);
   const upcoming = [...text.matchAll(DUE_RE)]
     .map((m) => isoDate(Number(m[3]), MONTHS.indexOf(m[1].toLowerCase()), Number(m[2])))
     .filter((d): d is string => Boolean(d) && (d as string) >= today)
     .sort();
-  if (!upcoming.length) return []; // open banner, but no upcoming due date: not evidence of a live opening
+  if (!upcoming.length) return withFeed([], { total: 1 }); // open banner, but no upcoming due date: not evidence of a live opening
   const due = upcoming[0];
   const dueText = `${MONTHS[Number(due.slice(5, 7)) - 1].replace(/^./, (x) => x.toUpperCase())} ${Number(due.slice(8))}, ${due.slice(0, 4)}`;
 
@@ -522,14 +547,17 @@ async function adpCareerCenter(c: CompanyFeed): Promise<RawPosting[]> {
   const list = await getJSON<{ jobRequisitions?: AdpReq[] }>(`${ADP}?${q}&$top=100`);
   const reqs = usable<AdpReq>(list?.jobRequisitions, (r) => has(r.itemID) && has(r.requisitionTitle), "jobRequisitions", ADP);
   const out: RawPosting[] = [];
-  for (const r of reqs.slice(0, 40)) {
+  let incomplete = reqs.length >= 100; // a full page may be truncated: what it leaves out is unknown, not closed
+  // Every listed requisition is read: the student filter needs the detail, so a cap before it could hide student jobs.
+  for (const r of reqs) {
     if (!/^[0-9_]{5,30}$/.test(r.itemID)) continue;
     const detail = await getJSON<AdpReq>(`${ADP}/${r.itemID}?${q}`).catch(() => null);
-    const p = detail ? mapAdpRequisition({ ...r, ...detail }, c) : null;
+    if (!detail) { incomplete = true; continue; }
+    const p = mapAdpRequisition({ ...r, ...detail }, c);
     if (p) out.push(p);
     await new Promise((res) => setTimeout(res, 250));
   }
-  return out;
+  return withFeed(out, { total: reqs.length, incomplete });
 }
 
 // ── Application-window pages ──────────────────────────────────────────────────────────────────
@@ -552,7 +580,7 @@ export function parseWindowPage(html: string, c: CompanyFeed, now: number): RawP
   const text = htmlToText(main).replace(/\s+/g, " ");
   const win = applicationWindow(text);
   const today = todayISODate(now);
-  if (!win || today < win.opens || today > win.closes) return [];
+  if (!win || today < win.opens || today > win.closes) return withFeed([], { total: 1 }); // outside the window: closed, not broken
   const roles = (c.config.roles ?? "").split("|").map((r) => r.trim()).filter(Boolean);
   const closeText = `${MONTHS[Number(win.closes.slice(5, 7)) - 1].replace(/^./, (x) => x.toUpperCase())} ${Number(win.closes.slice(8))}, ${win.closes.slice(0, 4)}`;
   // The application link: the first link to the configured application host, else the page itself.
@@ -605,11 +633,14 @@ async function sjsuPage(c: CompanyFeed): Promise<RawPosting[]> {
   if (c.config.mode === "window") return parseWindowPage(html, c, Date.now());
   const postings = parseListPage(html, c);
   if (c.config.details === "acrobat") {
-    // King Library: each opening links its job description as an Acrobat share. Read it for duties and pay; the link
-    // stays the apply link (the PDF says how to apply). One failure leaves that posting as it was.
+    // King Library: each opening links its job description as an Acrobat share. Read it for duties, pay and the real
+    // application form. One unreadable PDF keeps that posting's last good copy (detailUnread).
     for (const p of postings) {
       const read = () => acrobatText(p.applyUrl).catch(() => null);
-      const got = /^https:\/\/acrobat\.adobe\.com\//i.test(p.applyUrl) ? (await read()) ?? (await read()) : null; // one retry
+      const isAcrobat = /^https:\/\/acrobat\.adobe\.com\//i.test(p.applyUrl);
+      const got = isAcrobat ? (await read()) ?? (await read()) : null; // one retry
+      // Unreadable twice: flagged, so the last good description and form link are kept (agent.ts) instead of this stub.
+      if (isAcrobat && !got) p.detailUnread = true;
       const text = got?.text ?? null;
       if (got && text) {
         // The description PDF is not the application: it links the real form (a Google Form behind one.SJSU login,
