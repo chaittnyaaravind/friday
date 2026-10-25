@@ -50,6 +50,10 @@ const LEXICON: Lex[] = [
   ["production", /\bin\s+production\b|\bproduction[- ](?:ready|grade|system|environment|deploy\w*)\b/i, "scope"],
   ["end-to-end", /\bend-?to-?end\b/i, "scope"],
   ["award-winning", /\baward-?winning\b|\bwon\b|\bawarded\b/i, "scope"],
+  // Found live 2026-10-25: an AI summary called private repositories "open-source tools".
+  ["open-source / published", /\bopen-?\s?sourced?\b|\bpublicly (?:available|released)\b|\bpublished\b/i, "scope"],
+  ["users / adoption", /\b(?:used by|adopted by|users?|customers?|clients?|downloads?|installs?)\b/i, "outcome"],
+  ["launched / released", /\b(?:launched|released|went live)\b/i, "outcome"],
   ["improved / increased", /\b(?:improv(?:ed|ing|es)|increas(?:ed|ing|es)|boost(?:ed|ing)|accelerat(?:ed|ing)|enhanc(?:ed|ing))\b/i, "outcome"],
   ["reduced / saved", /\b(?:reduc(?:ed|ing|es)|cut|saved|decreas(?:ed|ing)|eliminat(?:ed|ing)|minimi[sz](?:ed|ing))\b/i, "outcome"],
   ["optimized / streamlined", /\b(?:optimi[sz](?:ed|ing|es)|streamlin(?:ed|ing)|scal(?:ed|ing))\b/i, "outcome"],
@@ -90,6 +94,8 @@ export function newFactsIn(suggestion: string, evidence: string): NewFact[] {
   }
   for (const [label, re, kind] of LEXICON) {
     const m = suggestion.match(re);
+    // "used by 50,000 users": the invented number already rejects the line and names the claim; don't name it twice.
+    if (label === "users / adoption" && facts.some((f) => f.kind === "number")) continue;
     if (m && !re.test(evidence)) {
       add({
         claim: m[0].trim(),

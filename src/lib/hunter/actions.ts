@@ -90,9 +90,10 @@ async function approveClaimed(db: SupabaseClient, item: HuntItem & { application
 
   const { url } = await handOff(db, item.user_id, item.application_id);
   const pdf = versionId ? await resumePdf(db, item.user_id, versionId) : null;
-  if (pdf) await sendDocument(chatId, { name: pdf.name, bytes: pdf.bytes, type: "application/pdf" }, `Tailored resume for ${title}`);
+  // The resume is the point of the hand-off: its caption says what it is and where it goes, and a missing one is said.
+  if (pdf) await sendDocument(chatId, { name: pdf.name, bytes: pdf.bytes, type: "application/pdf" }, `📄 Your tailored resume for ${title}${employer ? ` (${employer})` : ""}.\nAttach this file to the application form: ${url}`);
   if (item.telegram_message_id) await editMessage(chatId, item.telegram_message_id, note(`✅ <b>Approved</b> — ${esc(title)} (${esc(employer)})`));
-  await sendMessage(chatId, handOffNotice({ itemId: item.id, title, url, reason: null }));
+  await sendMessage(chatId, handOffNotice({ itemId: item.id, title, url, reason: pdf ? null : "⚠️ FRIDAY couldn't attach your resume here; download it in FRIDAY → Applications before you submit." }));
   await touch(db, item.id, { state: "handed_off" });
   return "Approved — resume and link sent.";
 }

@@ -5,6 +5,14 @@ const verdict = (suggestion: string, evidence: string) => verdictOf(newFactsIn(s
 const claims = (suggestion: string, evidence: string) => newFactsIn(suggestion, evidence).map((f) => f.claim.toLowerCase());
 
 describe("hallucinated fact detection", () => {
+  it("flags open-source, adoption and launch claims the evidence does not make", () => {
+    const ev = "Built a job-assistant web app with a Telegram bot";
+    expect(newFactsIn("Built open-source tools including a job-assistant web app", ev).map((f) => f.kind)).toContain("scope");
+    expect(verdictOf(newFactsIn("Built a web app used by students", ev))).toBe("confirm");
+    expect(verdictOf(newFactsIn("Launched a job-assistant web app with a Telegram bot", ev))).toBe("confirm");
+    expect(verdictOf(newFactsIn("Created a job-assistant web app with a Telegram bot", ev))).toBe("ok");
+  });
+
   it("REJECTS an invented user count ('Built a website' → '…used by 50,000 users')", () => {
     const facts = newFactsIn("Built a website used by 50,000 users", "Built a website");
     expect(facts.some((f) => f.kind === "number" && f.claim === "50000")).toBe(true);
