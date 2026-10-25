@@ -1,12 +1,14 @@
 "use client";
 
-import { Check, Download, ShieldAlert } from "lucide-react";
-import { useDeferredValue, useMemo, type ReactNode } from "react";
+import { Check, Download, Loader2, ScanText, ShieldAlert, X } from "lucide-react";
+import { useDeferredValue, useMemo, useState, type ReactNode } from "react";
 import { analyzeAts } from "@/lib/resume/ats";
+import type { ParseTest } from "@/lib/resume/parse-test";
 import { TEMPLATES, type TemplateId } from "@/lib/resume/templates";
 import type { ResumeDoc } from "@/lib/resume/types";
 import type { Issue } from "@/lib/resume/validate";
-import { Card, Label, cx } from "../ui";
+import { api } from "../actions";
+import { Button, Card, Label, cx } from "../ui";
 import { ResumePreview } from "./preview";
 
 type Verification = { ok: boolean; issues: Issue[] } | null;
@@ -62,6 +64,8 @@ export function ExportPanel({ id, doc, template, setTemplate, verification, save
         </div>
         <p className="text-[12px] leading-snug text-dim">Single-column, real text, standard fonts — no images, tables or text boxes. PDF headings are not letter-spaced so parsers read them as words.</p>
       </Card>
+
+      <ParseTestCard id={id} template={template} saved={saved} />
     </div>
   );
 }
@@ -79,4 +83,54 @@ function ExportLink({ href, disabled, primary, children }: { href: string; disab
   const base = "inline-flex h-10 items-center gap-2 rounded-full px-5 text-[14px] font-medium transition-colors";
   if (disabled) return <span aria-disabled className={cx(base, "cursor-not-allowed text-dim hairline")}><Download size={14} /> {children}</span>;
   return <a href={href} className={cx(base, primary ? "bg-accent text-accent-ink hover:bg-accent-hover" : "text-text hairline hover:bg-surface-2")}><Download size={14} /> {children}</a>;
+}
+
+/**
+ * "What an ATS sees": the saved version is rendered to the exact PDF it would download, and its text layer is read back
+ * the way an applicant tracking system reads it. Real file, real extraction, pass/fail checks shown with the raw text.
+ */
+function ParseTestCard({ id, template, saved }: { id: string; template: TemplateId; saved: boolean }) {
+  const [test, setTest] = useState<{ for: string; result: ParseTest } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const key = `${id}:${template}`;
+  const current = test?.for === key ? test.result : null;
+  const run = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await api<{ test: ParseTest }>(`/api/resumes/versions/${id}/parse-test?template=${template}`);
+      setTest({ for: key, result: r.test });
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card className="flex flex-col gap-4 p-5">
+      <div className="flex items-center justify-between gap-3">
+        <Label>ATS parse test</Label>
+        <Button onClick={run} disabled={busy || !saved}>{busy ? <Loader2 size={14} className="animate-spin" /> : <ScanText size={14} />} {current ? "Run again" : "Read it like an ATS"}</Button>
+      </div>
+      {!current && !err && <p className="text-[12.5px] leading-snug text-muted">Renders the exact PDF you would send, reads its text back the way applicant tracking systems do, and checks that every section, date and line comes out intact.</p>}
+      {err && <p className="text-[12.5px] text-accent">{err}</p>}
+      {current && (
+        <>
+          <ul className="flex flex-col gap-2 text-[13px]">
+            {current.checks.map((c) => (
+              <li key={c.id} className="flex items-start gap-2.5 leading-snug">
+                <span className={cx("mt-0.5 grid size-4 shrink-0 place-items-center rounded-full", c.ok ? "bg-moss-soft text-moss" : "bg-amber-soft text-amber")}>{c.ok ? <Check size={10} /> : <X size={10} />}</span>
+                <span className="text-muted"><span className="text-text">{c.label}.</span> {c.detail}{c.problems.length > 0 && <span className="mt-1 block text-[12px] text-amber">{c.problems.slice(0, 4).join(" · ")}</span>}</span>
+              </li>
+            ))}
+          </ul>
+          <details className="group rounded-xl bg-surface-2 p-3">
+            <summary className="cursor-pointer text-[12.5px] font-medium text-text">What an ATS sees</summary>
+            <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words font-mono text-[11.5px] leading-relaxed text-muted">{current.text}</pre>
+          </details>
+        </>
+      )}
+    </Card>
+  );
 }

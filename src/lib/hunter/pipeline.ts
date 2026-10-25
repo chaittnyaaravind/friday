@@ -19,7 +19,9 @@ import { isAiConfigured } from "@/lib/ai/client";
 import { loadActiveJobsForMatching, loadMatchProfile } from "@/lib/discovery/agent";
 import { isDeskJob } from "@/lib/domain/campus-fit";
 import { assessPhysical, isPhysicalLevel, type PhysicalFlag } from "@/lib/domain/physical";
+import { parseTest, parseTestLine } from "@/lib/resume/parse-test";
 import { tailorResume, type TailorCreated } from "@/lib/resume/tailor-service";
+import type { ResumeDoc } from "@/lib/resume/types";
 import { sendMessage, telegramConfigured } from "@/lib/telegram/bot";
 import { applyChannel, type ApplyChannel } from "./apply-channel";
 import { applicationEmail } from "./email-draft";
@@ -183,6 +185,13 @@ async function prepareAndNotify(db: SupabaseClient, it: { id: string; user_id: s
   const list = (sources ?? []) as { source_name: string; source: string; is_official: boolean }[];
   const viaHandshake = list.some((s) => s.source === "handshake_import");
   const report = tailored?.report;
+  // The exact PDF Approve would send (actions.ts renders the same document, default template), read back like an ATS.
+  let parsed: string | null = null;
+  if (tailored) {
+    const { data: v } = await db.from("resume_versions").select("content").eq("id", tailored.version.id).maybeSingle();
+    const t = v ? await withTimeout(parseTest(v.content as ResumeDoc).catch(() => null), 15_000) : null;
+    parsed = t ? parseTestLine(t) : null;
+  }
   const blockers = [...(resumeProblem ? [resumeProblem] : []), ...state.issues.filter((i) => i.severity === "block").map((i) => i.message)];
   const card = huntCard({
     itemId: it.id,
@@ -208,6 +217,7 @@ async function prepareAndNotify(db: SupabaseClient, it: { id: string; user_id: s
           changes: report.changedSections.map((c) => `${c.title}: ${c.detail}`),
           verified: report.verification.ok,
           rewrites: tailored!.ai.map((a) => ({ where: a.where, after: a.after })),
+          parse: parsed,
         }
       : null,
     screens: tailored?.screens.map((s) => ({ label: s.label, covered: s.covered })),

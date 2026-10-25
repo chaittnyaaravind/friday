@@ -65,12 +65,13 @@ describe("huntCard shows the AI rewrites and the posting's screens", () => {
       itemId: "00000000-0000-4000-8000-000000000001",
       job: { title: "Office Assistant", employer: "SJSU Associated Students", payText: null, physical: "low", physicalWhy: [], deskWhy: ["computer work"], source: "Official page", url: null, deadline: null },
       score: 80, research: null,
-      resume: { label: "Resume — AS", matched: 2, total: 3, missing: [], changes: [], verified: true, rewrites: [{ where: "Experience · Front Desk", after: "Greeted visitors & answered questions" }] },
+      resume: { label: "Resume — AS", matched: 2, total: 3, missing: [], changes: [], verified: true, rewrites: [{ where: "Experience · Front Desk", after: "Greeted visitors & answered questions" }], parse: "ATS parse test passed (1 page · 6 sections · 20 lines read back intact)" },
       screens: [{ label: "Customer-facing experience", covered: "yes" }, { label: "Excel", covered: "no" }, { label: "Availability", covered: "check" }],
       channel: { kind: "site", reason: "Apply on the official page.", needs: [] }, email: null, confirmations: [], blockers: [], appUrl: "https://x/app",
     });
     expect(card.text).toContain("1 line rewritten in the posting's terms");
     expect(card.text).toContain("Greeted visitors &amp; answered questions");
     expect(card.text).toContain("✅ Customer-facing experience · ❌ Excel · ❔ Availability");
+    expect(card.text).toContain("🧾 ATS parse test passed (1 page · 6 sections · 20 lines read back intact)");
   });
 });

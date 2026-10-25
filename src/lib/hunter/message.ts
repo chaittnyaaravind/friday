@@ -17,7 +17,7 @@ export type HuntCard = {
   job: { title: string; employer: string; payText: string | null; physical: PhysicalLevel; physicalWhy: string[]; deskWhy: string[]; source: string; url: string | null; deadline: string | null };
   score: number | null;
   research: { summary: string; required: string[] } | null;
-  resume: { label: string; matched: number; total: number; missing: string[]; changes: string[]; verified: boolean; rewrites?: { where: string; after: string }[] } | null;
+  resume: { label: string; matched: number; total: number; missing: string[]; changes: string[]; verified: boolean; rewrites?: { where: string; after: string }[]; parse?: string | null } | null;
   /** What the posting screens for and whether the profile shows it (campus-screens.ts). */
   screens?: { label: string; covered: "yes" | "no" | "check" }[];
   channel: ApplyChannel;
@@ -53,6 +53,7 @@ export function huntCard(c: HuntCard): TgMessage {
       L.push(`✍️ ${c.resume.rewrites.length} line${c.resume.rewrites.length === 1 ? "" : "s"} rewritten in the posting's terms (fact-checked, nothing added), e.g.:`);
       L.push(`<i>${esc(clip(c.resume.rewrites[0].after, 220))}</i>`);
     }
+    if (c.resume.parse) L.push(`🧾 ${esc(c.resume.parse)}`);
     if (c.resume.missing.length) L.push(`Not on your profile (left out, never invented): ${esc(c.resume.missing.slice(0, 5).join(", "))}`);
   } else L.push("", "⚠️ No tailored resume: upload and review your resume in FRIDAY first.");
   if (c.screens?.length) {

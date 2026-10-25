@@ -112,3 +112,21 @@ describe("ATS analysis", () => {
     expect(r.rating).toBe("Needs work");
   });
 });
+
+describe("ATS: writing style and skills shown", () => {
+  it("flags filler, first person and AI-style phrasing line by line, with a link to the line", () => {
+    const d = good();
+    d.sections[1].entries[0].bullets[0].text = "Leveraged my passion for Python to deliver seamless APIs";
+    const style = analyzeAts(d).components.find((c) => c.id === "style")!;
+    expect(style.score).toBeLessThan(100);
+    expect(style.fixes[0].ref).toBeTruthy();
+    expect(analyzeAts(good()).components.find((c) => c.id === "style")!.score).toBe(100);
+  });
+  it("counts a listed skill as shown only when a bullet, tech list or course uses it; spoken languages are exempt", () => {
+    const d = good();
+    d.sections[3].lines = [line("s1", "Programming: Python, SQL, TypeScript, Go"), line("s2", "Languages: English, Telugu")];
+    const c = analyzeAts(d).components.find((x) => x.id === "skills_shown")!;
+    expect(c.details).toEqual(["Not shown: Go"]);
+    expect(c.score).toBe(75);
+  });
+});

@@ -8,7 +8,9 @@
  */
 import { findRepeats, findWeakBullets, allLines, type LineRef } from "./edits";
 import { docToText } from "./generate";
-import { wordCount } from "./guard";
+import { resolveSkill } from "@/lib/domain/skills";
+import { hasTerm, wordCount } from "./guard";
+import { lintWriting } from "@/lib/writing/style";
 import type { JobMatch } from "./jobmatch";
 import type { ResumeDoc } from "./types";
 
@@ -159,6 +161,38 @@ export function analyzeAts(doc: ResumeDoc, opts: { match?: JobMatch | null } = {
       bullets.length ? `${withNum} of ${bullets.length} bullets include a number.` : "No experience or project bullets to evaluate.",
       ["Only add numbers you can verify — FRIDAY never invents them."],
       findWeakBullets(doc).filter((f) => f.severity === "tip").slice(0, 3).map((f) => ({ message: `Missing evidence for “${f.text.slice(0, 60)}…” — add a real measurement if you have one.`, ref: f.ref }))));
+  }
+
+  // ── Writing style: what a recruiter reads as filler or AI-written (the same lint every FRIDAY draft passes) ──
+  {
+    const STYLE = new Set(["cliche", "ai_tell", "first_person", "duty", "dash", "exclamation", "doubled_word"]);
+    const lines = [...allLines(doc)].filter((x) => (x.entry && WORK.has(x.section.kind)) || x.section.kind === "summary").filter((x) => x.line.text.trim());
+    // The line itself is the evidence: this checks wording only, never scope (validateDoc owns facts).
+    const flagged = lines.map((x) => ({ x, issues: lintWriting(x.line.text, x.section.kind === "summary" ? "summary" : "bullet", x.line.text).filter((i) => STYLE.has(i.code)) })).filter((f) => f.issues.length);
+    const score = lines.length ? (1 - flagged.length / lines.length) * 100 : 0;
+    comps.push(component("style", "Writing style", 10, score,
+      !lines.length ? "No summary or bullets to read." : flagged.length ? `${flagged.length} of ${lines.length} lines use filler, clichés, first person or AI-style phrasing.` : `All ${lines.length} lines read plainly: no clichés, filler, first person or AI-style phrasing.`,
+      [...new Set(flagged.flatMap((f) => f.issues.map((i) => i.code)))].map((c) => `✗ ${c.replace("_", " ")}`),
+      flagged.slice(0, 4).map((f) => ({ message: f.issues[0].message, ref: f.x.ref }))));
+  }
+
+  // ── Skills shown in your work: a listed skill the bullets, tech lists and coursework never use reads as padding ──
+  {
+    const skillLines = doc.sections.filter((s) => s.kind === "skills").flatMap((s) => s.lines.map((l) => l.text));
+    // A spoken-language group ("Languages: English, Telugu") or soft-skill / interests group is not shown by project work.
+    const listed = [...new Set(skillLines.flatMap((t) => {
+      const m = /^([^:]{1,40}):\s(.+)$/.exec(t);
+      const values = (m ? m[2] : t).split(/,\s*/).map((x) => x.trim()).filter(Boolean);
+      const label = m?.[1].trim() ?? "";
+      const spoken = /^(?:spoken )?languages?$/i.test(label) && !values.some((v) => resolveSkill(v));
+      return spoken || /\b(?:soft|interests?|hobbies)\b/i.test(label) ? [] : values;
+    }))];
+    const work = doc.sections.filter((s) => s.kind !== "skills" && s.kind !== "summary").flatMap((s) => [...s.entries.flatMap((e) => [e.heading, e.subheading, ...e.bullets.map((b) => b.text)]), ...s.lines.map((l) => l.text)]).join("\n");
+    const unshown = listed.filter((k) => !hasTerm(work, k));
+    if (listed.length) comps.push(component("skills_shown", "Skills shown in your work", 10, ((listed.length - unshown.length) / listed.length) * 100,
+      unshown.length ? `${listed.length - unshown.length} of ${listed.length} listed skills appear in a bullet, project tech list or course.` : `Every listed skill (${listed.length}) is backed by a bullet, project or course.`,
+      unshown.slice(0, 10).map((k) => `Not shown: ${k}`),
+      unshown.slice(0, 4).map((k) => ({ message: `Show where you used ${k} (a bullet or a project's tech list), or drop it from Skills.` }))));
   }
 
   // ── Keyword coverage (job description required) ──
