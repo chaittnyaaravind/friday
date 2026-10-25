@@ -30,7 +30,11 @@ export function applyChannel(description: string | null | undefined, applyUrl: s
   const text = (description ?? "").replace(/\s+/g, " ");
   const needs = NEEDS.filter((n) => n.re.test(text)).map((n) => n.label);
   const to = (EMAIL_INSTRUCTION.exec(text)?.[1] ?? MAILTO.exec(applyUrl ?? "")?.[1] ?? MAILTO.exec(text)?.[1] ?? null)?.toLowerCase() ?? null;
-  if (!to) return { kind: "site", reason: "The posting does not say to apply by email, so you apply on the official page.", needs };
+  if (!to) {
+    // Campus forms behind SSO ("you must be logged in to your one.SJSU account") can only be submitted by the student.
+    const sso = /\bone\.?\s?sjsu\b|\bsjsu (?:sso|single sign-on)\b/i.test(text);
+    return { kind: "site", reason: sso ? "The application form needs your one.SJSU login, so only you can submit it: open it, attach this resume, submit." : "The posting does not say to apply by email, so you apply on the official page.", needs };
+  }
   if (needs.length) return { kind: "site", reason: `It is applied to by email (${to}), but it also asks for ${needs.join(", ")}, which FRIDAY cannot fill in or sign for you.`, needs };
   return { kind: "email", to };
 }

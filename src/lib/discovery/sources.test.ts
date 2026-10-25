@@ -10,7 +10,7 @@ import { campusEmployerOf } from "@/lib/domain/campus";
 import { parseHours } from "@/lib/domain/hours";
 import { parsePay } from "@/lib/domain/normalize";
 import { REGISTRY } from "./registry";
-import { acrobatPdfUrl, ADAPTERS, adpStudentPosting, applicationWindow, isCampusTitle, mapAdpRequisition, parseRecruitmentPage, parseWindowPage, SourceError, STUDENT_TITLE, usable, type CompanyFeed } from "./sources";
+import { acrobatPdfUrl, ADAPTERS, applicationLink, adpStudentPosting, applicationWindow, isCampusTitle, mapAdpRequisition, parseRecruitmentPage, parseWindowPage, SourceError, STUDENT_TITLE, usable, type CompanyFeed } from "./sources";
 
 const dir = new URL("../../../test/fixtures/sources/", import.meta.url);
 const json = <T>(file: string): T => JSON.parse(readFileSync(new URL(file, dir), "utf8")) as T;
@@ -651,5 +651,21 @@ describe("Acrobat share pages (King Library job descriptions)", () => {
     expect(acrobatPdfUrl(page)).toBe("https://acp-aep-cs-blobstore-prod-va6-data.adobe.io/a93a86b5-edd6?response-content-disposition=attachment&response-content-type=application%2Fpdf&X-Amz-Expires=14400&X-Amz-Signature=abc");
     expect(acrobatPdfUrl('<a href="https://acp-aep-cs-blobstore-prod-va6-data.adobe.io.evil.com/a?response-content-type=application%2Fpdf">')).toBeNull();
     expect(acrobatPdfUrl("<p>no link</p>")).toBeNull();
+  });
+});
+
+describe("applicationLink (where a job description PDF says to apply)", () => {
+  // Shapes verified 2026-10-25 on the King Library's IT Helpdesk and LRSP Archival descriptions.
+  const it1 = "To apply for this position, please fill out the Student Assistant job application by clicking on the link below (note that\nyou must be logged in to your one.SJSU account to access the link):\nhttps://forms.gle/8EWSgvfYXTrvYa6H8\nPosition Title: IT Helpdesk";
+  const it2 = "To apply for this position, please fill out the Student Assistant job application by clicking on the link\nbelow (note that you must be logged in to your one.SJSU account to access the link):\nLibrary Research Scholar Program Application\nPosition Title: LRSP";
+  it("takes the URL written after “To apply”", () => {
+    expect(applicationLink(it1)).toBe("https://forms.gle/8EWSgvfYXTrvYa6H8");
+  });
+  it("falls back to the PDF's clickable links when the text only names the form", () => {
+    expect(applicationLink(it2, ["https://www.sjsu.edu/library/", "https://docs.google.com/forms/d/e/1FAIpQLSabc/viewform"])).toBe("https://docs.google.com/forms/d/e/1FAIpQLSabc/viewform");
+  });
+  it("never picks a non-form host, a Google Doc that is not a form, a PDF, or plain http", () => {
+    expect(applicationLink(it2, ["https://evil.example/apply", "https://docs.google.com/document/d/x", "https://www.sjsu.edu/hr/jd.pdf", "http://forms.gle/x"])).toBeNull();
+    expect(applicationLink("No instructions here.")).toBeNull();
   });
 });

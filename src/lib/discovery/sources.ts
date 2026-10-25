@@ -609,9 +609,14 @@ async function sjsuPage(c: CompanyFeed): Promise<RawPosting[]> {
     // stays the apply link (the PDF says how to apply). One failure leaves that posting as it was.
     for (const p of postings) {
       const read = () => acrobatText(p.applyUrl).catch(() => null);
-      const text = /^https:\/\/acrobat\.adobe\.com\//i.test(p.applyUrl) ? (await read()) ?? (await read()) : null; // one retry
-      if (text) {
-        p.description = text.slice(0, 20_000);
+      const got = /^https:\/\/acrobat\.adobe\.com\//i.test(p.applyUrl) ? (await read()) ?? (await read()) : null; // one retry
+      const text = got?.text ?? null;
+      if (got && text) {
+        // The description PDF is not the application: it links the real form (a Google Form behind one.SJSU login,
+        // verified 2026-10-25). That form becomes the apply link; the PDF stays reachable from the description.
+        const form = applicationLink(text, got.links);
+        p.description = `${text.slice(0, 19_500)}${form ? `\n\nJob description: ${p.applyUrl}` : ""}`;
+        if (form) p.applyUrl = form;
         // The Library states pay as "Initial Hourly Rate … Undergraduate Students - $18.45" (verified 2026-10-24).
         const rate = /hourly rate[\s\S]{0,120}?\$\s?(\d{2}(?:\.\d{2})?)/i.exec(text)?.[1];
         p.payText = payRateText(text) ?? payFromText(text) ?? (rate ? `$${rate}/hr` : null);
@@ -718,16 +723,19 @@ export function acrobatPdfUrl(html: string): string | null {
   return null;
 }
 
-async function acrobatText(url: string): Promise<string | null> {
+async function acrobatText(url: string): Promise<PdfRead | null> {
   const u = new URL(url);
   if (u.hostname !== "acrobat.adobe.com" || !/^\/id\/urn:aaid:sc:/i.test(u.pathname)) return null;
   const res = await fetch(u, { headers: { "user-agent": UA }, signal: AbortSignal.timeout(TIMEOUT), cache: "no-store" });
   if (!res.ok) return null;
   const pdf = acrobatPdfUrl(await res.text());
-  return pdf ? pdfText(pdf) : null;
+  return pdf ? pdfRead(pdf) : null;
 }
 
-async function pdfText(url: string): Promise<string | null> {
+/** A PDF's text and the targets of its clickable links (a link's URL is often not in the text: "Apply here"). */
+type PdfRead = { text: string; links: string[] };
+
+async function pdfRead(url: string): Promise<PdfRead | null> {
   const u = new URL(url);
   const sjsu = u.hostname === "www.sjsu.edu" && /\.pdf$/i.test(u.pathname);
   if (!sjsu && !ADOBE_BLOB.test(u.hostname)) return null;
@@ -735,9 +743,43 @@ async function pdfText(url: string): Promise<string | null> {
   if (!res.ok) return null;
   const buf = new Uint8Array(await res.arrayBuffer());
   if (buf.byteLength > PDF_MAX) return null;
-  const { extractText, getDocumentProxy } = await import("unpdf");
-  const { text } = await extractText(await getDocumentProxy(buf), { mergePages: true });
-  return text.replace(/[ \t]+/g, " ").replace(/\n{2,}/g, "\n").trim() || null;
+  const { extractLinks, extractText, getDocumentProxy } = await import("unpdf");
+  const doc = await getDocumentProxy(buf);
+  const { text } = await extractText(doc, { mergePages: true });
+  const links = await extractLinks(doc).then((r) => r.links).catch(() => [] as string[]);
+  const clean = text.replace(/[ \t]+/g, " ").replace(/\n{2,}/g, "\n").trim();
+  return clean ? { text: clean, links } : null;
+}
+
+const pdfText = async (url: string) => (await pdfRead(url))?.text ?? null;
+
+/** Hosts a campus application form lives on. A link elsewhere in a job description (a department page, a map) is not it. */
+const FORM_HOST = /^(?:forms\.gle|docs\.google\.com|forms\.office\.com|forms\.microsoft\.com|sjsu\.joinhandshake\.com|app\.joinhandshake\.com)$/i;
+/** A campus system on its own sjsu.edu subdomain (e.g. a forms or HR portal). www.sjsu.edu is department pages, never a form. */
+const SJSU_APP_HOST = /^(?!www\.)(?:[\w-]+\.)+sjsu\.edu$/i;
+
+/**
+ * Where a job description says to apply: the first https link after "to apply" in its text, else the first of its
+ * clickable links on an application-form host. Null when it names none, so the description stays the link.
+ */
+export function applicationLink(text: string, links: string[] = []): string | null {
+  const ok = (raw: string, campus = true) => {
+    try {
+      const u = new URL(raw.replace(/[).,;]+$/, ""));
+      if (u.protocol !== "https:" || !(FORM_HOST.test(u.hostname) || (campus && SJSU_APP_HOST.test(u.hostname)))) return null;
+      if (u.hostname === "docs.google.com" && !/^\/forms\//.test(u.pathname)) return null;
+      return u.toString();
+    } catch {
+      return null;
+    }
+  };
+  const at = text.search(/\bto apply\b|\bhow to apply\b|\bapply (?:here|online|at|by)\b/i);
+  if (at >= 0) for (const m of text.slice(at, at + 700).matchAll(/https?:\/\/[^\s<>"]+/g)) {
+    const u = ok(m[0]);
+    if (u) return u;
+  }
+  // Among clickable links a real form host wins over a campus subdomain.
+  return links.map((l) => ok(l, false)).find(Boolean) ?? links.map((l) => ok(l)).find(Boolean) ?? null;
 }
 
 function payFromText(text: string): string | null {
