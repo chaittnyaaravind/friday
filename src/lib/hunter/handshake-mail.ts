@@ -17,7 +17,7 @@ import { htmlToText } from "@/lib/domain/normalize";
 
 export type HandshakeJob = { handshakeId: string; url: string; title: string; employer: string | null; onCampus: boolean; payText: string | null; meta: string | null };
 
-const JOB_LINK = /^https?:\/\/(?:[a-z0-9-]+\.)*joinhandshake\.com\/(?:stu\/|e\/\d+\/)?(?:jobs|job-search|postings)\/(\d{4,12})\b/i;
+export const JOB_LINK = /^https?:\/\/(?:[a-z0-9-]+\.)*joinhandshake\.com\/(?:stu\/|e\/\d+\/)?(?:jobs|job-search|postings)\/(\d{4,12})\b/i;
 const GENERIC = /^(?:view(?: (?:job|details|posting|all))?|apply(?: now)?|see (?:job|more|details)|learn more|details|open|here|click here)$/i;
 const ANCHOR = /<a\s[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
 
@@ -32,8 +32,8 @@ const span = (inner: string, cls: string) => {
   const m = new RegExp(`<span[^>]*class=["'][^"']*\\b${cls}\\b[^"']*["'][^>]*>([\\s\\S]*?)<\\/span>`, "i").exec(inner);
   return m ? clean(m[1]) : "";
 };
-const ON_CAMPUS = /\bon[- ]campus\b|\bsan jos[eé] state\b|\bsjsu\b/i;
-const PAY = /^\$[\d.,]+(?:\s*[–-]\s*\$?[\d.,]+)?\s*\/\s*(?:hr|hour|yr|year)\b|^up to \$[\d.,]+\s*\/\s*(?:hr|hour)\b/i;
+export const ON_CAMPUS = /\bon[- ]campus\b|\bsan jos[eé] state\b|\bsjsu\b/i;
+export const PAY = /^\$[\d.,]+(?:\s*[–-]\s*\$?[\d.,]+)?\s*\/\s*(?:hr|hour|yr|year)\b|^up to \$[\d.,]+\s*\/\s*(?:hr|hour)\b/i;
 
 /** A stable id for a card whose link hides the job id: the same job in two emails gets the same id. */
 function cardId(employer: string, title: string, meta: string): string {

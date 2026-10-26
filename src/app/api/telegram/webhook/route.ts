@@ -1,6 +1,8 @@
 import { approve, loadItem, markApplied, skip } from "@/lib/hunter/actions";
 import { backfill, redeemLinkCode } from "@/lib/hunter/link";
 import { openJobsMessage } from "@/lib/hunter/open-jobs";
+import { importPasted } from "@/lib/hunter/paste-import";
+import { parsePastedJob } from "@/lib/hunter/pasted-job";
 import { processQueue } from "@/lib/hunter/pipeline";
 import { sameSecret } from "@/lib/hunter/tokens";
 import { answerCallback, sendMessage } from "@/lib/telegram/bot";
@@ -13,7 +15,9 @@ type Update = {
   callback_query?: { id: string; from: { id: number }; data?: string; message?: { chat: { id: number } } };
 };
 
-const HELP = "FRIDAY sends you new SJSU desk jobs here, ready to approve. Send /open to see every SJSU job open to apply right now. To link this chat, open FRIDAY → Settings → Auto Hunter and tap “Connect Telegram”.";
+const HELP = "FRIDAY sends you new SJSU desk jobs here, ready to approve. Send /open to see every SJSU job open to apply right now. Saw a job on Handshake? Copy the whole job page (its link too, if you like) and paste it here: FRIDAY tailors your resume to it. To link this chat, open FRIDAY → Settings → Auto Hunter and tap “Connect Telegram”.";
+const LINK_ONLY = "Handshake needs your login, so FRIDAY can't open that link. Open the job in Handshake, select all of its text, copy it, and paste it here (with the link if you like).";
+const NO_TITLE = "FRIDAY couldn't find the job title in that. Paste it again with “Title: …” and “Employer: …” as the first two lines.";
 
 /**
  * POST /api/telegram/webhook — updates from the FRIDAY bot. Only Telegram knows TELEGRAM_WEBHOOK_SECRET (set with
@@ -31,6 +35,19 @@ export async function POST(req: Request) {
       if (/^\/(?:open|jobs|count)(?:@\w+)?\s*$/i.test(update.message.text.trim())) {
         const { data: linked } = await db.from("hunter_links").select("user_id").eq("telegram_chat_id", chatId).maybeSingle();
         await sendMessage(chatId, linked ? await openJobsMessage(db, (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/+$/, "")) : { text: HELP, buttons: [] });
+        return Response.json({ ok: true });
+      }
+      // A pasted job (from Handshake or anywhere): imported for this student, then the usual tailored card follows.
+      const paste = parsePastedJob(update.message.text);
+      if (paste) {
+        const { data: linked } = await db.from("hunter_links").select("user_id").eq("telegram_chat_id", chatId).maybeSingle();
+        if (!linked) await sendMessage(chatId, { text: HELP, buttons: [] });
+        else if ("error" in paste) await sendMessage(chatId, { text: paste.error === "link_only" ? LINK_ONLY : NO_TITLE, buttons: [] });
+        else {
+          const { reply, queued } = await importPasted(db, linked.user_id as string, paste.job);
+          await sendMessage(chatId, reply);
+          if (queued) await processQueue(db, { deadline: Date.now() + 90_000, userId: linked.user_id as string, limit: 3 });
+        }
         return Response.json({ ok: true });
       }
       const code = /^\/start\s+([A-Za-z0-9]{8})\s*$/.exec(update.message.text.trim())?.[1] ?? (/^[A-Za-z0-9]{8}$/.test(update.message.text.trim()) ? update.message.text.trim() : null);
