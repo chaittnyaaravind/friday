@@ -15,7 +15,7 @@ import "server-only";
 import { allLines, applySuggestion, basisOf, evidenceLines, findWeakBullets, lineContext, type Proposal, type Target } from "@/lib/resume/edits";
 import { dutyTargets, jobRelevance, supportedDuties } from "@/lib/resume/campus-screens";
 import { docToText } from "@/lib/resume/generate";
-import { hasTerm } from "@/lib/resume/guard";
+import { hasTerm, summaryFacts, wordCount } from "@/lib/resume/guard";
 import type { CandidateItem, ResumeDoc } from "@/lib/resume/types";
 import { lintWriting, type WritingKind } from "@/lib/writing/style";
 import { isAiConfigured } from "./client";
@@ -114,7 +114,14 @@ export async function aiTailor(doc: ResumeDoc, o: { userId: string; keywords: st
     out = applySuggestion(out, c.target, text, { op: c.op, basis, sig: signAiText(o.userId, text, basis) });
     changes.push({ where: c.where, before: c.before, after: text, reason: c.op === "ats" ? `Uses the posting's terms your experience supports: ${c.keywords.join(", ")}.` : "Clearer, stronger opening with the same facts." });
   });
-  const summary = summaryP ? pickRewrite(summaryP, "summary", duties, noLessRelevant(summaryBefore)) : null;
+  // The summary draws on the whole resume, so it gets the stricter summary check too (guard.ts summaryFacts).
+  const resumeText = docToText(doc);
+  const projects = doc.sections.filter((s) => s.kind === "projects").flatMap((s) => s.entries).map((e) => ({ name: e.heading.split(/\s*[:—–]\s*/)[0].trim(), evidence: [e.heading, e.subheading, ...e.bullets.map((b) => b.text)].join("\n") })).filter((p) => p.name.length >= 2);
+  // It also keeps saying who the student is: a summary that turns into one project's description loses the opening line recruiters read.
+  // …and keeps most of what it said: a one-line rewrite that drops "writes clear setup and test documentation" is fact-checked but weaker.
+  const keepsWho = (text: string) => (!hasTerm(summaryBefore, "student") || hasTerm(text, "student")) && wordCount(text) >= 0.7 * wordCount(summaryBefore);
+  const summaryOk = (text: string) => noLessRelevant(summaryBefore)(text) && keepsWho(text) && !summaryFacts(text, resumeText, projects).length;
+  const summary = summaryP ? pickRewrite(summaryP, "summary", duties, summaryOk) : null;
   if (summaryP && summary) {
     const basis = summaryP.basis.slice(0, 6000);
     const before = summaryBefore;

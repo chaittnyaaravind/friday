@@ -180,3 +180,16 @@ describe("decodeEntities", () => {
     expect(decodeEntities("&#0; &#99999999;")).toBe("&#0; &#99999999;");
   });
 });
+
+// Phrases from live SJSU postings (2026-10-25) that are not skill requirements.
+describe("extractSkills: campus boilerplate", () => {
+  it("does not read monitoring climbers or budgets as observability", () => {
+    expect(extractSkills("Assist with the prevention of emergencies by monitoring the form and technique of climbers")).not.toContain("observability");
+    expect(extractSkills("monitoring of Club Sports Team budgets and accounts")).not.toContain("observability");
+    expect(extractSkills("Experience with system monitoring and Grafana dashboards")).toContain("observability");
+  });
+  it("does not read an information security standards clause as cybersecurity", () => {
+    expect(extractSkills("Associated Students Information Security Standards as a condition of employment")).not.toContain("cybersecurity");
+    expect(extractSkills("Coursework in information security or networking")).toContain("cybersecurity");
+  });
+});

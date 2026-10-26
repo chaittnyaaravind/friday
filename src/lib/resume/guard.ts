@@ -116,6 +116,46 @@ export function newFactsIn(suggestion: string, evidence: string): NewFact[] {
   return facts;
 }
 
+// ───────────────────────── Summaries ─────────────────────────
+// A summary may draw on the WHOLE resume, so "the evidence mentions it somewhere" is too weak. Found live 2026-10-25: AI
+// summaries that passed newFactsIn called a May 2030 student a "recent graduate", put Rust (Controller-9's) on FD9, called a
+// monitor a "web scraper", and gave an empty volunteer entry duties ("supported peers with coursework and study strategies").
+
+const STATUS = /\b(?:recent(?:ly)?\s+grad\w*|graduated|graduate|alumn\w*|years?\s+of\s+experience|experienced|seasoned|expert|professional|junior|senior|sophomore|freshman|certified)\b/i;
+// Words any summary may use without the resume saying them: connectives and plain resume verbs, not claims.
+const SUMMARY_WORDS = new Set("about also and apps application applications build builds building built create creates created creating design designs designed develop develops developed developing including into make makes made project projects skill skills student students that their them they this tool tools using uses used with work works worked working writes wrote written from have has where which while whose".split(" "));
+const STEM_SUFFIX = ["ations", "ation", "ings", "ing", "ers", "er", "ions", "ion", "ed", "es", "ly", "s"];
+// Every plausible stem of a word ("answers" → answe, answ), so "answers" and "answered" share one.
+const stems = (w: string) => {
+  const l = w.toLowerCase();
+  return [l, ...STEM_SUFFIX.filter((s) => l.endsWith(s) && l.length - s.length >= 4).map((s) => l.slice(0, l.length - s.length))].map((x) => x.slice(0, 5));
+};
+const contentWords = (s: string) => s.normalize("NFKD").replace(/[̀-ͯ]/g, "").split(/[^A-Za-z]+/).filter((w) => w.length >= 4);
+
+/**
+ * What an AI summary asserts beyond the resume: an unstated status, a tool placed on a project that did not use it, or any
+ * content word the resume never uses. `projects` are the resume's projects with their own evidence (tech list and bullets).
+ */
+export function summaryFacts(summary: string, basis: string, projects: { name: string; evidence: string }[]): NewFact[] {
+  const facts = newFactsIn(summary, basis);
+  const status = STATUS.exec(summary)?.[0];
+  if (status && !STATUS.test(basis)) facts.push({ claim: status, kind: "scope", severity: "reject", reason: `“${status}” isn't stated on your resume.` });
+
+  // Each project named in the summary owns the text up to the next project named: tools there must be that project's.
+  const named = projects.flatMap((p) => [...summary.matchAll(new RegExp(`(?<![A-Za-z0-9])${esc(p.name)}(?![A-Za-z0-9])`, "g"))].map((m) => ({ p, at: m.index! }))).sort((a, b) => a.at - b.at);
+  named.forEach(({ p, at }, i) => {
+    const span = summary.slice(at, named[i + 1]?.at ?? summary.length).split(/[.;]/)[0];
+    for (const t of skillMentions(span)) {
+      if (!hasTerm(p.evidence, t)) facts.push({ claim: t, kind: "technology", severity: "reject", reason: `${p.name} doesn't use ${t}.` });
+    }
+  });
+
+  const have = new Set(contentWords(basis).flatMap(stems));
+  const unseen = [...new Set(contentWords(summary).filter((w) => !SUMMARY_WORDS.has(w.toLowerCase()) && !stems(w).some((s) => have.has(s))))];
+  if (unseen.length) facts.push({ claim: unseen.join(", "), kind: "scope", severity: "reject", reason: `Your resume never says “${unseen.join("”, “")}”.` });
+  return facts;
+}
+
 export const verdictOf = (facts: NewFact[]): Verdict => (facts.some((f) => f.severity === "reject") ? "reject" : facts.length ? "confirm" : "ok");
 
 /** A skills line may only regroup, reorder or relabel skills the source already lists. */

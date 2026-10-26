@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { newFactsIn, skillsLineFacts, verdictOf } from "./guard";
+import { newFactsIn, skillsLineFacts, summaryFacts, verdictOf } from "./guard";
 
 const verdict = (suggestion: string, evidence: string) => verdictOf(newFactsIn(suggestion, evidence));
 const claims = (suggestion: string, evidence: string) => newFactsIn(suggestion, evidence).map((f) => f.claim.toLowerCase());
@@ -78,5 +78,33 @@ describe("skills line guard", () => {
   });
   it("rejects a skill the user never listed", () => {
     expect(skillsLineFacts("Languages: Python, Java", "Languages: Python, Java, Go, React").map((f) => f.claim)).toEqual(["Go", "React"]);
+  });
+});
+
+// Synthetic, modeled on the live summaries rejected on 2026-10-25.
+describe("summaryFacts", () => {
+  const FD9 = { name: "FD9", evidence: "FD9: peer-to-peer file transfer\nTypeScript, React, WebRTC\nCreated a browser app that sends files directly between two devices over WebRTC" };
+  const C9 = { name: "Controller-9", evidence: "Controller-9: phone as a game controller\nKotlin, Swift, Rust, Tauri\nWrote the desktop host in Rust" };
+  const RESUME = [
+    "SUMMARY\nComputer Science student at San José State University who builds and tests web and mobile apps in TypeScript, Kotlin, Swift and Rust.",
+    "EDUCATION\nSan José State University — B.S. Computer Science (May 2030)",
+    `PROJECTS\n${FD9.evidence}\n${C9.evidence}`,
+    "RELEVANT COURSEWORK\nCS 46A: Introduction to Programming (Java)",
+    "LEADERSHIP & ACTIVITIES\nStudent Volunteer — College volunteer program (India)",
+  ].join("\n");
+  const rejects = (s: string) => summaryFacts(s, RESUME, [FD9, C9]).map((f) => f.claim);
+
+  it("rejects a status the resume doesn't state", () => {
+    expect(rejects("Recent graduate building web and mobile apps in TypeScript and Kotlin.")).toContain("Recent graduate");
+  });
+  it("rejects a tool placed on a project that didn't use it", () => {
+    expect(rejects("Computer Science student who built FD9, a peer-to-peer file transfer app in WebRTC and Rust, and Controller-9 in Kotlin.")).toContain("Rust");
+  });
+  it("rejects duties and labels the resume never mentions", () => {
+    expect(rejects("Supported peers with coursework and study strategies as a student volunteer in a college volunteer program in India").join(" ")).toMatch(/study/);
+    expect(rejects("Computer Science student who built a web scraper for campus jobs.").join(" ")).toMatch(/scraper/);
+  });
+  it("accepts a summary made of the resume's own facts", () => {
+    expect(rejects("Computer Science student at San José State University who built FD9, a peer-to-peer file transfer app in WebRTC, and Controller-9, a phone game controller in Kotlin, Swift and Rust.")).toEqual([]);
   });
 });

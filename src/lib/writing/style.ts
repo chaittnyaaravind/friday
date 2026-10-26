@@ -72,7 +72,9 @@ const CLICHES: [RegExp, string][] = [
 const AI_WORDS = /\b(?:delv(?:e|es|ed|ing)|tapestry|testament|pivotal|crucial|vibrant|intricate|intricacies|meticulous(?:ly)?|seamless(?:ly)?|bolster(?:ed|ing)?|garner(?:ed|ing)?|foster(?:ed|ing)?|underscor(?:e|es|ed|ing)|showcas(?:e|es|ed|ing)|multifaceted|utiliz(?:e|ed|es|ing)|facilitat(?:e|ed|es|ing)|commenc(?:e|ed|ing)|endeavou?rs?|transformative|groundbreaking|game[- ]chang(?:ing|er)|paramount|realm|landscape of|interplay|navigat(?:e|ed|ing) the|serv(?:es|ed|ing) as|stands? as|boasts?)\b/i;
 const NOT_X_BUT_Y = /\bnot (?:just|only|merely|simply)\b[^.]{0,80}\b(?:but|it'?s)\b|\bit'?s not (?:about )?[^.]{1,60}[,;]\s*it'?s\b/i;
 const RIDER = /,\s*(?:ensuring|highlighting|showcasing|underscoring|demonstrating|reflecting|emphasizing|fostering|contributing to)\b/i;
-const STOCK_OPENER = /(?:^|[.!?]\s+|\n)(?:Additionally|Moreover|Furthermore|Notably|Indeed|Importantly|Interestingly|Overall|In conclusion),/;
+// The participle must take an object ("troubleshooting transfers"); a noun in a list ("type checks, linting and a build") is fine.
+const ING_TAIL = /,\s+((?!(?:during|including|according|regarding|following|concerning|pending)\b)[a-z]+ing)\s+(?!(?:and|or)\b)[a-z][^,.;]*\.?$/;
+const STOCK_OPENER =/(?:^|[.!?]\s+|\n)(?:Additionally|Moreover|Furthermore|Notably|Indeed|Importantly|Interestingly|Overall|In conclusion),/;
 const DUTY = /^(?:responsible for|duties (?:included|include)|helped (?:with|to)|worked on|in charge of|tasked with)\b/i;
 const SCOPE = /\b(?:spearhead(?:ed|ing)?|architect(?:ed|ing)|led|managed|oversaw|directed|headed)\b/i;
 const FIRST_PERSON = /\b(?:I|me|my|mine|we|our)\b/;
@@ -102,6 +104,10 @@ export function lintWriting(text: string, kind: WritingKind, evidence = ""): Lin
   if (nxy) out.push({ code: "ai_tell", severity: "warn", message: "A “not X but Y” contrast adds weight, not information; state the point directly.", excerpt: nxy[0].slice(0, 80) });
   const rider = RIDER.exec(t);
   if (rider) out.push({ code: "ai_tell", severity: "warn", message: `“${rider[0].replace(/^,\s*/, "")} …” is padding bolted onto a fact; cut it or state the real result.`, excerpt: rider[0] });
+  // A bullet that ends on a tacked-on participle (", troubleshooting transfers that fail…"): found live 2026-10-25 in an AI
+  // rewrite of a line that said it plainly ("to troubleshoot transfers…").
+  const tail = (kind === "bullet" || kind === "project") && !rider ? ING_TAIL.exec(t) : null;
+  if (tail) out.push({ code: "ai_tell", severity: "warn", message: `“${tail[1]} …” is an “-ing” clause tacked onto the end; say it as its own verb (“to …”, “so …”) or cut it.`, excerpt: tail[0] });
   const opener = STOCK_OPENER.exec(t);
   if (opener) out.push({ code: "ai_tell", severity: "warn", message: `Drop the stock transition “${opener[0].replace(/^[\s.!?]+/, "").replace(/,$/, "")}”.` });
   if (/\S\s*[—–]\s*\S/.test(t.replace(/\b(?:19|20)\d{2}\s*[–—-]\s*(?:(?:19|20)\d{2}|present)\b/gi, ""))) out.push({ code: "dash", severity: "warn", message: "Replace the dash with a comma, colon or a new sentence; dashes everywhere read as AI-written." });

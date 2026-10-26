@@ -38,6 +38,13 @@ describe("lintWriting — professional, credible, not generic", () => {
 });
 
 describe("AI-tell checks (humanizer / anti-slop)", () => {
+  it("flags a tacked-on -ing clause at the end of a bullet, not a plain one", () => {
+    // Live AI rewrite, 2026-10-25.
+    expect(lintWriting("Built a connection diagnostics panel and Playwright test to force TURN relay, troubleshooting transfers that fail on restrictive networks", "bullet").map((i) => i.code)).toContain("ai_tell");
+    expect(lintWriting("Added a diagnostics panel to troubleshoot transfers that fail on restrictive networks", "bullet")).toEqual([]);
+    expect(lintWriting("Answered phones and emails at the front desk, including during finals week", "bullet").map((i) => i.code)).not.toContain("ai_tell");
+    expect(lintWriting("Tested the app with over 1,100 automated Vitest tests, plus type checks, linting and a production build before each release", "bullet")).toEqual([]);
+  });
   const codes = (t: string, k: Parameters<typeof lintWriting>[1] = "bullet") => lintWriting(t, k).map((i) => i.code);
   it("flags AI vocabulary, not-X-but-Y, padding riders, stock openers, dashes and duty phrasing", () => {
     expect(codes("Utilized Excel to track inventory")).toContain("ai_tell");

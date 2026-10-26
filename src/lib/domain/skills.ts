@@ -107,7 +107,8 @@ export const SKILLS: Skill[] = [
   s("ci-cd", "CI/CD", "devops", ["ci/cd", "continuous integration", "github actions", "jenkins", "gitlab ci"]),
   s("linux", "Linux", "systems", ["unix"]),
   s("git", "Git", "tools", ["github", "version control", "gitlab"]),
-  s("observability", "Observability", "devops", ["prometheus", "grafana", "datadog", "monitoring"]),
+  // Bare "monitoring" is not a skill: campus postings monitor climbers and budgets (found live 2026-10-25); see CONTEXT_MATCHERS.
+  s("observability", "Observability", "devops", ["prometheus", "grafana", "datadog"]),
   // mobile
   s("ios", "iOS", "mobile", ["ios development", "swiftui", "uikit"]),
   s("android", "Android", "mobile", ["android development", "jetpack compose"]),
@@ -118,7 +119,8 @@ export const SKILLS: Skill[] = [
   s("test-automation", "Test Automation", "testing", ["selenium", "cypress", "playwright", "automated testing", "test automation"]),
   s("qa", "QA", "testing", ["quality assurance", "sdet", "software testing"]),
   // security
-  s("cybersecurity", "Cybersecurity", "security", ["security", "information security", "infosec"]),
+  // "Information Security Standards as a condition of employment" is HR boilerplate, not a skill; see CONTEXT_MATCHERS.
+  s("cybersecurity", "Cybersecurity", "security", ["security", "infosec"]),
   s("network-security", "Network Security", "security", ["firewalls", "ids/ips"]),
   s("penetration-testing", "Penetration Testing", "security", ["pentesting", "pen testing", "ethical hacking"]),
   s("cryptography", "Cryptography", "security", ["encryption"]),
@@ -173,6 +175,8 @@ const CONTEXT_MATCHERS: Matcher[] = [
   { slug: "express", re: /\bexpress(?:\.js|js)\b|\bexpress\b(?=\s*(?:\(|framework|server|middleware|\/\s*node))|\bnode(?:\.js)?\s*(?:\/|and|,|with)\s*express\b/i },
   { slug: "spring", re: /\bspring\s*(?:boot|mvc|framework|cloud|data|security)\b|\bspringboot\b|\bjava\s*(?:\/|and|,)\s*spring\b/i },
   { slug: "excel", re: /\b(?:microsoft\s+)?excel\b(?!\s+(?:at|in|as|when)\b)(?=.{0,30}(?:spreadsheets?|formulas?|pivot|vba|,|\/))|\bms excel\b|\bmicrosoft excel\b/i },
+  { slug: "observability", re: /\b(?:system|infrastructure|application|server|network|performance|uptime)\s+monitoring\b|\bmonitoring\s+(?:tools?|stack|dashboards?|metrics|alerts?|and\s+alerting)\b/i },
+  { slug: "cybersecurity", re: /\binformation security\b(?!\s+(?:standards?|polic(?:y|ies)|training|awareness|requirements?|office|guidelines?))/i },
   { slug: "ml", re: /\bml\b(?=\s*(?:\/|models?|engineer|pipelines?|systems?|frameworks?|infrastructure|,\s*ai))|\bai\/ml\b|\bml\/ai\b/i },
 ];
 
