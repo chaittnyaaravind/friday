@@ -48,6 +48,7 @@ function Login() {
   const [wait, setWait] = useState(0);
   const submitting = useRef(false);
   const trap = useRef<HTMLInputElement>(null);
+  const [queued, setQueued] = useState(false);
 
   useEffect(() => {
     if (wait <= 0) return;
@@ -116,12 +117,18 @@ function Login() {
         router.refresh();
       } else if (mode === "signup") {
         // The account is created on FRIDAY's server, already confirmed: no verification email to wait for.
-        // The server already retries a busy auth server; this covers the request itself failing on the way.
+        // 202 = in line behind other sign-ups (api/auth/signup admission control); a failed request is retried too.
+        // Asking again is safe: an account this request already created is recognised by its password.
         let res: Response | null = null;
-        for (let attempt = 0; attempt < 3 && (!res || res.status >= 500 && res.status !== 503); attempt++) {
-          if (attempt) await new Promise((r) => setTimeout(r, 1500 * attempt));
+        const until = Date.now() + 5 * 60_000;
+        for (let attempt = 0; Date.now() < until; attempt++) {
+          if (attempt) await new Promise((r) => setTimeout(r, 1200 + Math.random() * 2400));
           res = await fetch("/api/auth/signup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: to, password, website: trap.current?.value || undefined }) }).catch(() => null);
+          if (res && res.status !== 202 && (res.status < 500 || res.status === 503)) break;
+          setQueued(true);
         }
+        setQueued(false);
+        if (res?.status === 202) throw new Error("FRIDAY is very busy right now. Your place wasn't lost: press Create account again.");
         if (!res) throw new Error("Couldn't reach FRIDAY. Check your connection and try again.");
         if (res.status === 409) {
           // Already a member: if this is their password, just let them in instead of making them switch tabs.
@@ -271,7 +278,7 @@ function Login() {
                   {error && <p role="alert" className="text-[13px] leading-snug text-amber">{error}</p>}
                   <Button type="submit" variant="primary" size="lg" disabled={busy} className="mt-1 w-full">
                     {busy && <Loader2 size={16} className="animate-spin" />}
-                    {busy ? (mode === "signup" ? "Creating your account…" : "One moment…") : mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Email me a link"}
+                    {busy ? (mode === "signup" ? (queued ? "Lots of students joining. You\u2019re in line…" : "Creating your account…") : "One moment…") : mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Email me a link"}
                   </Button>
                   {mode === "magic" ? (
                     <button type="button" onClick={() => switchTo("signin")} className="inline-flex items-center justify-center gap-1.5 text-[13px] text-muted hover:text-text"><ArrowLeft size={14} /> Back to password sign-in</button>

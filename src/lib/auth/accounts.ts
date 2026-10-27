@@ -20,7 +20,7 @@ export type CreateResult = "created" | "exists";
 const ATTEMPTS = 6;
 const isExists = (e: { code?: string; message: string }) => e.code === "email_exists" || /already (been )?registered|already exists/i.test(e.message);
 /** The auth server timed out or failed under load: the account may or may not exist yet, and a retry is safe. */
-const isTransient = (e: { code?: string; status?: number; message: string }) =>
+export const isTransient = (e: { code?: string; status?: number; message: string }) =>
   e.code === "request_timeout" || (e.status ?? 0) >= 500 || e.status === 429 || /deadline|timeout|fetch failed|network|ECONNRESET/i.test(e.message);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -32,14 +32,15 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  */
 export async function createAccount(
   admin: SupabaseClient, email: string, password: string,
-  o: { isOurs?: () => Promise<boolean>; wait?: (ms: number) => Promise<unknown> } = {},
+  o: { isOurs?: () => Promise<boolean>; wait?: (ms: number) => Promise<unknown>; attempts?: number } = {},
 ): Promise<CreateResult> {
   const wait = o.wait ?? sleep;
+  const attempts = o.attempts ?? ATTEMPTS;
   for (let attempt = 0; ; attempt++) {
     const { error } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
     if (!error) return "created";
     if (isExists(error)) return attempt > 0 && (await o.isOurs?.()) ? "created" : "exists";
-    if (!isTransient(error) || attempt === ATTEMPTS - 1) throw error;
+    if (!isTransient(error) || attempt === attempts - 1) throw error;
     await wait(Math.min(8_000, 400 * 2 ** attempt) * (0.5 + Math.random()));
   }
 }
