@@ -1,4 +1,5 @@
 import { body, HttpError, ok, withUser } from "@/lib/api";
+import { requireAiQuota } from "@/lib/ai/quota";
 import { writeCoverLetter } from "@/lib/ai/tasks";
 import { loadProfileItems } from "@/lib/resume/profile";
 import { isEligible } from "@/lib/resume/types";
@@ -24,6 +25,7 @@ export const POST = withUser<{ id: string }>(async ({ db, user, req }, { id }) =
   const facts = items.map((i) => ({ section: i.section, ...(i.data as object) }));
   if (!facts.length) throw new HttpError(400, "Upload and review your resume first");
   const { data: profile } = await db.from("profiles").select("full_name").eq("id", user.id).single();
+  await requireAiQuota(user.id, "cover_letter");
   const { letter, grounded_in } = await writeCoverLetter(facts, { title: app.job_title, company: app.company_name, description }, profile?.full_name ?? null);
 
   // Checked against the student's facts only: the posting says what the employer needs, never what the student did.

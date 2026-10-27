@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { body, ok, withUser } from "@/lib/api";
+import { takeAiQuota } from "@/lib/ai/quota";
 import { normalizePrefs } from "@/lib/domain/notify-prefs";
 import { reportSummary } from "@/lib/resume/report";
 import { tailorResume } from "@/lib/resume/tailor-service";
@@ -20,7 +21,8 @@ const Input = z.object({
  */
 export const POST = withUser(async ({ db, user, req }) => {
   const input = await body(req, Input);
-  const result = await tailorResume(db, user.id, input);
+  // Past today's AI allowance the tailor still runs, deterministically: the student keeps a tailored resume either way.
+  const result = await tailorResume(db, user.id, { ...input, ai: await takeAiQuota(user.id, "tailor") });
   if (!("version" in result)) return ok(result);
 
   const { version, report, job } = result;

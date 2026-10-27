@@ -2,6 +2,7 @@ import { z } from "zod";
 import { analyzeATS, analyzeResume, generateResumeEdit, generateSummary, matchResumeToJob, optimizeSkills, runResumeAssistant } from "@/lib/ai/resume";
 import { aiProviders, isAiConfigured } from "@/lib/ai/client";
 import { body, HttpError, ok, withUser } from "@/lib/api";
+import { requireAiQuota } from "@/lib/ai/quota";
 import { basisOf, evidenceLines, findLine, lineContext, type LineRef, type Proposal } from "@/lib/resume/edits";
 import { signAiText, signingAvailable } from "@/lib/ai/sign";
 import { DocSchema, KindSchema } from "@/lib/resume/doc-schema";
@@ -79,6 +80,8 @@ export const POST = withUser(async ({ db, user, req }) => {
   if (configured) throttle(user.id);
   const providers = aiProviders().map((p) => p.provider);
   const meta = { configured, providers };
+  // AI operations draw on the daily allowance; analyze, match and ats are deterministic unless an explanation is asked for.
+  if (configured && (["edit", "summary", "skills", "assistant"].includes(input.op) || ("explain" in input && input.explain === true))) await requireAiQuota(user.id, "resume_ai");
 
   switch (input.op) {
     case "edit": {

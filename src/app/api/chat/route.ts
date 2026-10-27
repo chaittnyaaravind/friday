@@ -1,3 +1,4 @@
+import { takeAiQuota } from "@/lib/ai/quota";
 import { z } from "zod";
 import { errorResponse } from "@/lib/api";
 import { complete, friendlyAiError, isAiConfigured, isAiUnavailable, type ChatMessage, type ToolSpec } from "@/lib/ai/client";
@@ -132,6 +133,7 @@ export async function POST(req: Request) {
   let userId: string;
   let history: z.infer<typeof Body>["messages"];
   let sys: string;
+  let aiAllowed = false;
   try {
     db = await createSupabaseServer();
     const { data } = await db.auth.getUser();
@@ -140,6 +142,8 @@ export async function POST(req: Request) {
     history = Body.parse(await req.json()).messages;
     const { data: profile } = await db.from("profiles").select("full_name, major, work_authorization, origin_label").eq("id", userId).single();
     sys = system(profile);
+    // Past today's AI allowance FRIDAY still answers, locally, from the same catalog and tracker.
+    aiAllowed = wantsAi() && (await takeAiQuota(userId, "chat"));
   } catch (e) {
     return errorResponse(e);
   }
@@ -150,7 +154,7 @@ export async function POST(req: Request) {
       const send = (obj: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
       let sentText = false;
       try {
-        if (wantsAi()) {
+        if (aiAllowed) {
           try {
             send({ type: "mode", mode: "ai" });
             await runAi(db, userId, sys, history, (t) => { sentText = true; send({ type: "text", text: t }); }, (name) => send({ type: "tool", name }));

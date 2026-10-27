@@ -9,7 +9,7 @@
  *    Students without Telegram fall back to the email link in the browser.
  */
 import "server-only";
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendMessage, telegramConfigured } from "@/lib/telegram/bot";
 
@@ -90,4 +90,25 @@ export function readTurn(token: string | undefined, email: string, key: string):
   const want = Buffer.from(signTurn(email, Number(m[1]), key).split(".")[1], "hex");
   const got = Buffer.from(m[2], "hex");
   return want.length === got.length && timingSafeEqual(want, got) ? Number(m[1]) : null;
+}
+
+/**
+ * Has this password appeared in a known data breach? Have I Been Pwned's range API (k-anonymity): only the first five
+ * hex characters of the password's SHA-1 leave the server, and the match is made here. Padding hides the response size.
+ * Supabase's own breached-password check never runs for accounts created through the admin API, so this replaces it.
+ * A slow or failed lookup answers "no" — a third-party outage must never block sign-up.
+ */
+export async function isBreachedPassword(password: string, deps: { fetch?: typeof fetch } = {}): Promise<boolean> {
+  const sha1 = createHash("sha1").update(password).digest("hex").toUpperCase();
+  try {
+    const res = await (deps.fetch ?? fetch)(`https://api.pwnedpasswords.com/range/${sha1.slice(0, 5)}`, { headers: { "Add-Padding": "true" }, signal: AbortSignal.timeout(2500) });
+    if (!res.ok) return false;
+    const suffix = sha1.slice(5);
+    return (await res.text()).split("\n").some((line) => {
+      const [hash, count] = line.trim().split(":");
+      return hash === suffix && Number(count) > 0;
+    });
+  } catch {
+    return false;
+  }
 }

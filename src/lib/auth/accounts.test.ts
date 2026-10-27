@@ -14,7 +14,7 @@ vi.mock("@/lib/telegram/bot", () => ({
     return { messageId: 1 };
   },
 }));
-const { createAccount, readTurn, sendTelegramLink, signTurn, LINK_COOLDOWN_S } = await import("./accounts");
+const { createAccount, isBreachedPassword, readTurn, sendTelegramLink, signTurn, LINK_COOLDOWN_S } = await import("./accounts");
 
 type Target = { user_id: string; telegram_chat_id: number; signin_link_sent_at: string | null };
 function fakeAdmin(o: { createError?: { code?: string; message: string }; target?: Target }) {
@@ -110,5 +110,23 @@ describe("sign-up turns", () => {
     expect(readTurn(t, "a@sjsu.edu", "k2")).toBeNull();
     expect(readTurn("garbage", "a@sjsu.edu", "k1")).toBeNull();
     expect(readTurn(undefined, "a@sjsu.edu", "k1")).toBeNull();
+  });
+});
+
+describe("isBreachedPassword", () => {
+  // SHA-1("password") = 5BAA61E4C9B93F3F0682250B6CF8331B7EE68FD8
+  const range = (body: string, ok = true) => (async (url: string) => {
+    expect(url).toBe("https://api.pwnedpasswords.com/range/5BAA6");
+    return new Response(body, { status: ok ? 200 : 503 });
+  }) as unknown as typeof fetch;
+
+  it("matches the suffix and only ever sends the 5-character prefix", async () => {
+    expect(await isBreachedPassword("password", { fetch: range("1E4C9B93F3F0682250B6CF8331B7EE68FD8:9545824\r\nFFFFF:0") })).toBe(true);
+    expect(await isBreachedPassword("password", { fetch: range("0000000000000000000000000000000000A:3") })).toBe(false);
+  });
+  it("ignores padding rows and never blocks sign-up when the service is down", async () => {
+    expect(await isBreachedPassword("password", { fetch: range("1E4C9B93F3F0682250B6CF8331B7EE68FD8:0") })).toBe(false);
+    expect(await isBreachedPassword("password", { fetch: range("", false) })).toBe(false);
+    expect(await isBreachedPassword("password", { fetch: (async () => { throw new Error("offline"); }) as unknown as typeof fetch })).toBe(false);
   });
 });

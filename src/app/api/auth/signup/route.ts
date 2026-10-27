@@ -1,7 +1,8 @@
+import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { body, errorResponse, HttpError, ok } from "@/lib/api";
-import { createAccount, isTransient, readTurn, signTurn } from "@/lib/auth/accounts";
+import { createAccount, isBreachedPassword, isTransient, readTurn, signTurn } from "@/lib/auth/accounts";
 import { createSupabaseAdmin } from "@/lib/supabase/server";
 
 const Signup = z.object({
@@ -45,9 +46,19 @@ export async function POST(req: Request) {
     const admin = createSupabaseAdmin();
     const key = process.env.SUPABASE_SECRET_KEY!;
 
-    let at = readTurn(turn, email, key) ?? (await reserve(admin));
+    // Checked on the first request; a browser coming back with a genuine signed turn already passed these (a made-up
+    // turn is not genuine, so it cannot skip them).
+    // A turn is bound to this email AND this password, so a returning request cannot swap in one that skipped the checks.
+    const holder = `${email}|${createHash("sha256").update(password).digest("hex")}`;
+    const held = readTurn(turn, holder, key);
+    if (held === null) {
+      const local = email.split("@")[0];
+      if (local.length >= 4 && password.toLowerCase().includes(local)) throw new HttpError(422, "Choose a password that doesn't contain your email address.");
+      if (await isBreachedPassword(password)) throw new HttpError(422, "That password has appeared in a known data breach, so it isn't safe. Choose a different one.");
+    }
+    let at = held ?? (await reserve(admin));
     let wait = at - Date.now();
-    if (wait > WAIT_HERE_MS) return ok({ queued: true, turn: signTurn(email, at, key), waitMs: wait }, { status: 202 });
+    if (wait > WAIT_HERE_MS) return ok({ queued: true, turn: signTurn(holder, at, key), waitMs: wait }, { status: 202 });
     if (wait > 0) await sleep(wait);
 
     try {
@@ -63,7 +74,7 @@ export async function POST(req: Request) {
       // The auth server hiccuped: a fresh turn at the back of the line, never an error for the student.
       at = await reserve(admin);
       wait = Math.max(0, at - Date.now());
-      return ok({ queued: true, turn: signTurn(email, at, key), waitMs: wait }, { status: 202 });
+      return ok({ queued: true, turn: signTurn(holder, at, key), waitMs: wait }, { status: 202 });
     }
   } catch (e) {
     return errorResponse(e);

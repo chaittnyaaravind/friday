@@ -1,3 +1,4 @@
+import { requireAiQuota } from "@/lib/ai/quota";
 import { z } from "zod";
 import { body, HttpError, ok, withUser } from "@/lib/api";
 import { analyzeJob } from "@/lib/ai/tasks";
@@ -16,6 +17,7 @@ export const POST = withUser(async ({ db, user, req }) => {
   if (!job) throw new HttpError(404, "Opportunity not found");
   if (!job.description || job.description.length < 120) throw new HttpError(422, "This listing has no full description to analyze.");
 
+  await requireAiQuota(user.id, "analyze_job");
   const analysis = await analyzeJob(job.title, (job.companies as unknown as { name: string } | null)?.name ?? "", job.description);
 
   const admin = createSupabaseAdmin();
