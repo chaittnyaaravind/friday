@@ -116,10 +116,23 @@ function Login() {
         router.refresh();
       } else if (mode === "signup") {
         // The account is created on FRIDAY's server, already confirmed: no verification email to wait for.
-        const res = await fetch("/api/auth/signup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: to, password, website: trap.current?.value || undefined }) });
+        // The server already retries a busy auth server; this covers the request itself failing on the way.
+        let res: Response | null = null;
+        for (let attempt = 0; attempt < 3 && (!res || res.status >= 500 && res.status !== 503); attempt++) {
+          if (attempt) await new Promise((r) => setTimeout(r, 1500 * attempt));
+          res = await fetch("/api/auth/signup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: to, password, website: trap.current?.value || undefined }) }).catch(() => null);
+        }
+        if (!res) throw new Error("Couldn't reach FRIDAY. Check your connection and try again.");
         if (res.status === 409) {
+          // Already a member: if this is their password, just let them in instead of making them switch tabs.
+          const { error } = await supabase.auth.signInWithPassword({ email: to, password });
+          if (!error) {
+            router.replace(next);
+            router.refresh();
+            return;
+          }
           setMode("signin");
-          throw new Error("You already have an account with this email. Sign in instead.");
+          throw new Error("You already have an account with this email. Sign in with your password, or get a sign-in link.");
         }
         if (res.status === 503) await emailSignUp(to);
         else if (!res.ok) throw new Error(((await res.json().catch(() => null)) as { error?: string } | null)?.error ?? "Couldn't create the account. Try again.");
@@ -258,7 +271,7 @@ function Login() {
                   {error && <p role="alert" className="text-[13px] leading-snug text-amber">{error}</p>}
                   <Button type="submit" variant="primary" size="lg" disabled={busy} className="mt-1 w-full">
                     {busy && <Loader2 size={16} className="animate-spin" />}
-                    {busy ? "One moment…" : mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Email me a link"}
+                    {busy ? (mode === "signup" ? "Creating your account…" : "One moment…") : mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Email me a link"}
                   </Button>
                   {mode === "magic" ? (
                     <button type="button" onClick={() => switchTo("signin")} className="inline-flex items-center justify-center gap-1.5 text-[13px] text-muted hover:text-text"><ArrowLeft size={14} /> Back to password sign-in</button>

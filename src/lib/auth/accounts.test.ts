@@ -73,3 +73,27 @@ describe("sendTelegramLink", () => {
     expect(sent).toHaveLength(0);
   });
 });
+
+describe("createAccount under load", () => {
+  const flaky = (errors: ({ code?: string; status?: number; message: string } | null)[]) => {
+    let i = 0;
+    return { auth: { admin: { createUser: async () => ({ error: errors[Math.min(i++, errors.length - 1)] }) } } } as unknown as SupabaseClient;
+  };
+  const timeout = { code: "request_timeout", status: 504, message: "context deadline exceeded" };
+  const exists = { code: "email_exists", message: "already registered" };
+  const noWait = { wait: async () => {} };
+
+  it("retries a timed-out auth server until the account is created", async () => {
+    expect(await createAccount(flaky([timeout, timeout, null]), "a@sjsu.edu", "longpassword", noWait)).toBe("created");
+  });
+
+  it("claims an account its own timed-out attempt created, and only that", async () => {
+    expect(await createAccount(flaky([timeout, exists]), "a@sjsu.edu", "longpassword", { ...noWait, isOurs: async () => true })).toBe("created");
+    expect(await createAccount(flaky([timeout, exists]), "a@sjsu.edu", "longpassword", { ...noWait, isOurs: async () => false })).toBe("exists");
+    expect(await createAccount(flaky([exists]), "a@sjsu.edu", "longpassword", { ...noWait, isOurs: async () => true })).toBe("exists");
+  });
+
+  it("gives up after a bounded number of tries", async () => {
+    await expect(createAccount(flaky([timeout]), "a@sjsu.edu", "longpassword", noWait)).rejects.toMatchObject({ code: "request_timeout" });
+  });
+});

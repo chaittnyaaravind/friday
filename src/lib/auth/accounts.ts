@@ -17,11 +17,31 @@ export const LINK_COOLDOWN_S = 30;
 
 export type CreateResult = "created" | "exists";
 
-export async function createAccount(admin: SupabaseClient, email: string, password: string): Promise<CreateResult> {
-  const { error } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
-  if (!error) return "created";
-  if (error.code === "email_exists" || /already (been )?registered|already exists/i.test(error.message)) return "exists";
-  throw error;
+const ATTEMPTS = 6;
+const isExists = (e: { code?: string; message: string }) => e.code === "email_exists" || /already (been )?registered|already exists/i.test(e.message);
+/** The auth server timed out or failed under load: the account may or may not exist yet, and a retry is safe. */
+const isTransient = (e: { code?: string; status?: number; message: string }) =>
+  e.code === "request_timeout" || (e.status ?? 0) >= 500 || e.status === 429 || /deadline|timeout|fetch failed|network|ECONNRESET/i.test(e.message);
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Creates the account, riding out bursts: a burst of sign-ups makes the auth server hash hundreds of passwords at once and
+ * time out, so transient failures retry with jittered backoff. A retry that finds the email "already registered" asks
+ * `isOurs` whether the account takes this password — a timed-out first attempt that still succeeded must not tell the
+ * student their own brand-new account belongs to someone else.
+ */
+export async function createAccount(
+  admin: SupabaseClient, email: string, password: string,
+  o: { isOurs?: () => Promise<boolean>; wait?: (ms: number) => Promise<unknown> } = {},
+): Promise<CreateResult> {
+  const wait = o.wait ?? sleep;
+  for (let attempt = 0; ; attempt++) {
+    const { error } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
+    if (!error) return "created";
+    if (isExists(error)) return attempt > 0 && (await o.isOurs?.()) ? "created" : "exists";
+    if (!isTransient(error) || attempt === ATTEMPTS - 1) throw error;
+    await wait(Math.min(8_000, 400 * 2 ** attempt) * (0.5 + Math.random()));
+  }
 }
 
 export type LinkResult = { channel: "telegram" } | { channel: "none" } | { channel: "wait"; seconds: number };
