@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Eye, EyeOff, Loader2, Mail } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Loader2, Mail, Send } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -11,7 +11,7 @@ import { safeNextPath } from "@/lib/auth/safe-next";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 
 type Mode = "signin" | "signup" | "magic";
-type Sent = { kind: "magic" | "confirm"; email: string };
+type Sent = { kind: "magic" | "confirm" | "telegram"; email: string; bot?: string | null };
 
 const RESEND_AFTER = 30;
 
@@ -47,6 +47,7 @@ function Login() {
   const [sent, setSent] = useState<Sent | null>(null);
   const [wait, setWait] = useState(0);
   const submitting = useRef(false);
+  const trap = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (wait <= 0) return;
@@ -65,11 +66,38 @@ function Login() {
     return `${site}/auth/callback?next=${encodeURIComponent(next)}`;
   };
 
+  // Telegram first: FRIDAY mints the link itself, so no email limit applies (api/auth/link). Email only as the fallback.
   const sendLink = async (to: string) => {
-    const { error } = await createSupabaseBrowser().auth.signInWithOtp({ email: to, options: { emailRedirectTo: redirectUrl() } });
+    const r = (await fetch("/api/auth/link", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: to, next }) })
+      .then((res) => (res.ok ? res.json() : null))
+      .catch(() => null)) as { channel: "telegram" | "none" | "wait"; seconds?: number; bot?: string | null } | null;
+    if (r && r.channel !== "none") {
+      setSent({ kind: "telegram", email: to, bot: r.bot });
+      setWait(r.channel === "wait" ? r.seconds ?? RESEND_AFTER : RESEND_AFTER);
+      return;
+    }
+    const { error } = await createSupabaseBrowser().auth.signInWithOtp({ email: to, options: { emailRedirectTo: redirectUrl(), shouldCreateUser: false } });
     if (error) throw error;
     setSent({ kind: "magic", email: to });
     setWait(RESEND_AFTER);
+  };
+
+  // The old path, kept only for a server without the admin key (api/auth/signup answers 503 there).
+  const emailSignUp = async (to: string) => {
+    const { data, error } = await createSupabaseBrowser().auth.signUp({ email: to, password, options: { emailRedirectTo: redirectUrl() } });
+    if (error) throw error;
+    // Supabase answers a sign-up for an existing email with a user that has no identities, instead of an error.
+    if (data.user && data.user.identities?.length === 0) {
+      setMode("signin");
+      throw new Error("You already have an account with this email. Sign in instead.");
+    }
+    if (data.session) {
+      router.replace("/onboarding");
+      router.refresh();
+    } else {
+      setSent({ kind: "confirm", email: to });
+      setWait(RESEND_AFTER);
+    }
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -87,19 +115,19 @@ function Login() {
         router.replace(next);
         router.refresh();
       } else if (mode === "signup") {
-        const { data, error } = await supabase.auth.signUp({ email: to, password, options: { emailRedirectTo: redirectUrl() } });
-        if (error) throw error;
-        // Supabase answers a sign-up for an existing email with a user that has no identities, instead of an error.
-        if (data.user && data.user.identities?.length === 0) {
+        // The account is created on FRIDAY's server, already confirmed: no verification email to wait for.
+        const res = await fetch("/api/auth/signup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: to, password, website: trap.current?.value || undefined }) });
+        if (res.status === 409) {
           setMode("signin");
           throw new Error("You already have an account with this email. Sign in instead.");
         }
-        if (data.session) {
+        if (res.status === 503) await emailSignUp(to);
+        else if (!res.ok) throw new Error(((await res.json().catch(() => null)) as { error?: string } | null)?.error ?? "Couldn't create the account. Try again.");
+        else {
+          const { error } = await supabase.auth.signInWithPassword({ email: to, password });
+          if (error) throw error;
           router.replace("/onboarding");
           router.refresh();
-        } else {
-          setSent({ kind: "confirm", email: to });
-          setWait(RESEND_AFTER);
         }
       } else {
         await sendLink(to);
@@ -146,7 +174,14 @@ function Login() {
           <AnimatePresence mode="wait" initial={false}>
             {sent ? (
               <motion.div key="sent" {...swap} transition={{ duration: 0.45, ease: EASE_OUT }} className="flex flex-col gap-6">
-                <span className="grid size-12 place-items-center rounded-full bg-accent-soft text-accent"><Mail size={20} strokeWidth={1.6} /></span>
+                <span className="grid size-12 place-items-center rounded-full bg-accent-soft text-accent">{sent.kind === "telegram" ? <Send size={19} strokeWidth={1.6} /> : <Mail size={20} strokeWidth={1.6} />}</span>
+                {sent.kind === "telegram" ? (
+                  <div className="flex flex-col gap-3">
+                    <Label>Sign-in link sent</Label>
+                    <h1 className="text-[36px] leading-[1]">Check <span className="serif-em">Telegram</span>.</h1>
+                    <p className="text-[14.5px] leading-relaxed text-muted">FRIDAY sent a one-time sign-in link to the Telegram chat linked to <span className="text-text">{sent.email}</span>. Tap <span className="text-text">Sign in to FRIDAY</span> there.</p>
+                  </div>
+                ) : (
                 <div className="flex flex-col gap-3">
                   <Label>{sent.kind === "magic" ? "Sign-in link sent" : "One more step"}</Label>
                   <h1 className="text-[36px] leading-[1]">Check your <span className="serif-em">inbox</span>.</h1>
@@ -155,10 +190,15 @@ function Login() {
                     <span className="text-text">{sent.email}</span>. It can take a minute; check spam if it doesn&apos;t show.
                   </p>
                 </div>
+                )}
+                {sent.kind === "telegram" ? (
+                  <a href={sent.bot ? `https://t.me/${sent.bot}` : "https://web.telegram.org"} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 items-center self-start rounded-full bg-[rgb(var(--ink)/.06)] px-4 text-[14px] hairline hover:bg-[rgb(var(--ink)/.1)]">Open Telegram</a>
+                ) : (
                 <div className="flex flex-wrap gap-2">
                   <a href="https://mail.google.com/mail/u/0/#search/FRIDAY" target="_blank" rel="noopener noreferrer" className="inline-flex h-10 items-center rounded-full bg-[rgb(var(--ink)/.06)] px-4 text-[14px] hairline hover:bg-[rgb(var(--ink)/.1)]">Open Gmail</a>
                   <a href="https://outlook.office.com/mail/" target="_blank" rel="noopener noreferrer" className="inline-flex h-10 items-center rounded-full bg-[rgb(var(--ink)/.06)] px-4 text-[14px] hairline hover:bg-[rgb(var(--ink)/.1)]">Open Outlook</a>
                 </div>
+                )}
                 {error && <p role="alert" className="text-[13px] text-amber">{error}</p>}
                 <div className="flex items-center justify-between text-[13px]">
                   <button type="button" onClick={() => { setSent(null); setError(null); }} className="inline-flex items-center gap-1.5 text-muted hover:text-text"><ArrowLeft size={14} /> Use a different email</button>
@@ -190,7 +230,9 @@ function Login() {
                   </div>
                 )}
 
-                <form onSubmit={submit} className="flex flex-col gap-4">
+                <form onSubmit={submit} className="relative flex flex-col gap-4">
+                  {/* honeypot: invisible to people and screen readers; bots that fill it get no account */}
+                  <input ref={trap} name="website" tabIndex={-1} autoComplete="off" aria-hidden className="absolute -left-[9999px] size-px opacity-0" />
                   <Field label="Email">
                     <Input type="email" required autoFocus autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@sjsu.edu" className="h-11" />
                   </Field>
