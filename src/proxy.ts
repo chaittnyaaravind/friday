@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { safeNextPath } from "@/lib/auth/safe-next";
 
 const PUBLIC_PATHS = ["/", "/login", "/auth"];
 
@@ -25,6 +26,9 @@ export async function proxy(request: NextRequest) {
   const { data } = await supabase.auth.getUser();
   const path = request.nextUrl.pathname;
   const isPublic = PUBLIC_PATHS.some((p) => path === p || (p !== "/" && path.startsWith(p + "/")));
+
+  // Already signed in: the login page has nothing to offer, so go where the student was headed.
+  if (data.user && path === "/login") return NextResponse.redirect(new URL(safeNextPath(request.nextUrl.searchParams.get("next")), request.url));
 
   // API routes answer 401 themselves; only redirect page navigations.
   if (!data.user && !isPublic && !path.startsWith("/api/")) {

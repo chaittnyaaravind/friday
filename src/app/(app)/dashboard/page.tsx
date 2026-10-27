@@ -131,7 +131,8 @@ export default async function Dashboard() {
         <JobGrid jobs={best.jobs} empty={{ title: "No recent listings yet", body: "Run FRIDAY to search every source, or widen your filters in Discover.", action: <RunAgentButton /> }} />
       </Reveal>
 
-      <div className="grid gap-10 lg:grid-cols-[1.35fr_1fr] lg:gap-8">
+      {/* minmax(0, …) tracks: a long job title truncates instead of widening the column past a phone screen */}
+      <div className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] lg:gap-8">
         <Reveal as="section" className="flex flex-col gap-5">
           <SectionHeader eyebrow={`Within ${radius} mi of ${profile?.origin_label ?? "SJSU"}`} title="Around you" action={<LinkButton href={`/discover?miles=${radius}&sort=distance&includeRemote=0`} variant="ghost" size="sm">Map it out <ArrowUpRight size={14} /></LinkButton>} />
           <Card className="divide-y-[0.5px] divide-hairline-strong">

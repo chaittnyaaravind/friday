@@ -138,7 +138,7 @@ export default async function JobPage({ params }: PageProps<"/jobs/[id]">) {
         {closed && <Notice tone="amber" title={fresh.state === "expired" ? "This listing has expired" : "This listing is no longer on the employer's site"}>FRIDAY last saw it {ago(job.last_verified_at)}. It may have closed — check the official page before applying.</Notice>}
       </header>
 
-      <div className="grid gap-8 lg:grid-cols-[1fr_360px] lg:gap-10">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-10">
         <div className="flex min-w-0 flex-col gap-8">
           {fit && (
             <Card className="reveal reveal-1 p-6">

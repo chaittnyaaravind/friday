@@ -47,7 +47,7 @@ export default async function SjsuJobs({ searchParams }: PageProps<"/sjsu">) {
         <CampusOverviewStrip db={db} userId={user.id} />
       </div>
 
-      <div className="grid gap-10 lg:grid-cols-[1fr_300px]">
+      <div className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_300px]">
         <Feed
           searchParams={sp}
           preset={{ onCampus: true, deskOnly, sort: sp.sort ? undefined : "fit" }}

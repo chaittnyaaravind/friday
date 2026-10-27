@@ -51,7 +51,7 @@ export function SearchEverywhere({ query, city, state, radiusMiles, internshipsO
         <label className="flex items-center gap-2 text-[13px]"><input type="checkbox" checked={lastDay} onChange={(e) => setLastDay(e.target.checked)} className="size-4 accent-[var(--accent)]" /> Past 24 hours</label>
       </form>
 
-      <div className="grid gap-5 md:grid-cols-[1fr_1.6fr] md:gap-8">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] md:gap-8">
         <section className="flex flex-col gap-2.5" aria-label="Search FRIDAY">
           <span className="label">Search FRIDAY</span>
           <p className="text-[12.5px] leading-relaxed text-muted">Listings FRIDAY finds automatically — 100+ employers, SJSU&apos;s official pages and Adzuna — ranked against your resume.</p>
