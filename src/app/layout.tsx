@@ -8,15 +8,15 @@ const instrument = Instrument_Serif({ variable: "--font-instrument", subsets: ["
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: { default: "FRIDAY — your career agent", template: "%s · FRIDAY" },
-  description: "SJSU on-campus jobs and Silicon Valley internships that actually match you — found, explained, and tracked by FRIDAY.",
+  title: { default: "FRIDAY — the SJSU job hunter", template: "%s · FRIDAY" },
+  description: "FRIDAY hunts SJSU on-campus jobs for San José State students: checked every minute, ranked against you, resume tailored, sent to Telegram.",
   applicationName: "FRIDAY",
 };
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#100904" },
-    { media: "(prefers-color-scheme: light)", color: "#f5f2ec" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b0c08" },
+    { media: "(prefers-color-scheme: light)", color: "#f2ede2" },
   ],
   width: "device-width",
   initialScale: 1,

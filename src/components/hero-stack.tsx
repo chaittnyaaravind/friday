@@ -72,14 +72,31 @@ export function HeroStack() {
                 {c.miss.map((o) => <span key={o} className="inline-flex h-5 items-center gap-1 rounded-full bg-[rgb(var(--ink)/.06)] px-2 text-[10.5px] text-muted"><AlertTriangle size={9} className="text-amber" />{o}</span>)}
               </div>
             </div>
+            {i === 0 && <Lock />}
           </DeckCard>
         ))}
       </div>
       <style>{`
         @keyframes hero-in { from { opacity: 0; filter: blur(10px); } to { opacity: 1; filter: none; } }
         .hero-card { animation: hero-in 1100ms cubic-bezier(.32,.72,0,1) both; }
-        @media (prefers-reduced-motion: reduce) { .hero-card { animation: none; } }
+        @keyframes lock { from { opacity: 0; transform: scale(1.18); } 60% { opacity: 1; } to { opacity: 1; transform: none; } }
+        .hero-lock { animation: lock 900ms cubic-bezier(.32,.72,0,1) 1500ms both; }
+        @media (prefers-reduced-motion: reduce) { .hero-card, .hero-lock { animation: none; } }
       `}</style>
+    </div>
+  );
+}
+
+/** The hero moment: four gold brackets close in on the best match once the deck has landed. */
+function Lock() {
+  const corner = "absolute size-6 border-accent";
+  return (
+    <div aria-hidden className="hero-lock pointer-events-none absolute -inset-3">
+      <span className={`${corner} left-0 top-0 border-l border-t`} />
+      <span className={`${corner} right-0 top-0 border-r border-t`} />
+      <span className={`${corner} bottom-0 left-0 border-b border-l`} />
+      <span className={`${corner} bottom-0 right-0 border-b border-r`} />
+      <span className="label absolute -top-5 left-0 !text-[9.5px] !text-accent">Target locked</span>
     </div>
   );
 }

@@ -42,7 +42,7 @@ export function BookmarkletCard() {
             ref={link}
             draggable
             onClick={(e) => e.preventDefault()}
-            className="inline-flex cursor-grab items-center gap-2 rounded-full bg-accent px-4 py-2 text-[13px] font-medium text-white shadow-sm active:cursor-grabbing"
+            className="inline-flex cursor-grab items-center gap-2 rounded-full bg-accent px-4 py-2 text-[13px] font-medium text-accent-ink shadow-sm active:cursor-grabbing"
           >
             <Bookmark size={14} /> Send to FRIDAY
           </a>

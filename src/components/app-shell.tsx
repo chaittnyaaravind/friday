@@ -47,7 +47,7 @@ function ShellContent({ children, name }: { children: ReactNode; name: string | 
       <aside className="sticky top-0 hidden h-dvh flex-col gap-1 border-r-[0.5px] border-hairline-strong px-3 py-5 md:flex">
         <Link href="/dashboard" className="mb-6 flex items-baseline gap-2 px-3">
           <span className="text-[19px] font-medium tracking-[0.14em]">FRIDAY</span>
-          <span className="label !text-[9.5px]">for SJSU</span>
+          <span className="label !text-[9.5px]">the hunter</span>
         </Link>
         <nav className="flex flex-col gap-0.5">
           {NAV.map(({ href, label, icon: Icon }) => (

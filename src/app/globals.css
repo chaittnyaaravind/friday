@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 /*
- * FRIDAY — "Espresso Precision"
- * Oryzo's warm palette with Linear's app-grade restraint.
+ * FRIDAY — "Night Hunt"
+ * Night-olive black, bone ink, one lion-gold accent (close to SJSU gold). Linear's app-grade restraint.
  * Laws: muted = same hue at lower alpha · hairlines ≤1px tinted · accent < 5% of pixels ·
  * display weight 450–510, tight tracking · fast hovers (120ms), slow reveals (700ms).
  */
@@ -10,78 +10,78 @@
 :root,
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #100904;
-  --surface-1: #1a120c;
-  --surface-2: #251912;
-  --surface-3: #2f2118;
-  --ink: 255 237 215; /* cream as RGB triplet so alpha steps share the hue */
+  --bg: #0b0c08;
+  --surface-1: #13150f;
+  --surface-2: #1b1d16;
+  --surface-3: #24271d;
+  --ink: 236 228 210; /* bone as RGB triplet so alpha steps share the hue */
   --text: rgb(var(--ink));
-  --text-muted: rgb(var(--ink) / 0.6);
-  --text-dim: rgb(var(--ink) / 0.38);
+  --text-muted: rgb(var(--ink) / 0.62);
+  --text-dim: rgb(var(--ink) / 0.4);
   --hairline: rgb(var(--ink) / 0.1);
   --hairline-strong: rgb(var(--ink) / 0.18);
   --highlight: rgb(var(--ink) / 0.06);
-  --accent: #dc5000;
-  --accent-hover: #f25a00;
-  --accent-ink: #fff4e8;
-  --accent-soft: rgb(220 80 0 / 0.14);
-  --moss: #8fa56b;
-  --moss-soft: rgb(143 165 107 / 0.14);
-  --amber: #e0a34a;
-  --amber-soft: rgb(224 163 74 / 0.13);
-  --glass: rgb(32 25 20 / 0.72);
-  --shadow: 0 1px 0 rgb(var(--ink) / 0.05) inset, 0 20px 40px -24px rgb(0 0 0 / 0.7);
+  --accent: #d9a441;
+  --accent-hover: #e8b453;
+  --accent-ink: #17130a;
+  --accent-soft: rgb(217 164 65 / 0.14);
+  --moss: #93a86a;
+  --moss-soft: rgb(147 168 106 / 0.14);
+  --amber: #d0703c;
+  --amber-soft: rgb(208 112 60 / 0.14);
+  --glass: rgb(19 21 15 / 0.74);
+  --shadow: 0 1px 0 rgb(var(--ink) / 0.05) inset, 0 20px 40px -24px rgb(4 5 2 / 0.8);
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg: #f5f2ec;
-  --surface-1: #fbf9f5;
-  --surface-2: #ffffff;
-  --surface-3: #ebe6dd;
-  --ink: 38 26 18; /* espresso ink */
+  --bg: #f2ede2;
+  --surface-1: #f8f5ee;
+  --surface-2: #fdfbf6;
+  --surface-3: #e7e0d1;
+  --ink: 28 30 20; /* night-olive ink */
   --text: rgb(var(--ink));
-  --text-muted: rgb(var(--ink) / 0.64);
-  --text-dim: rgb(var(--ink) / 0.44);
+  --text-muted: rgb(var(--ink) / 0.66);
+  --text-dim: rgb(var(--ink) / 0.46);
   --hairline: rgb(var(--ink) / 0.1);
   --hairline-strong: rgb(var(--ink) / 0.18);
   --highlight: rgb(255 255 255 / 0.7);
-  --accent: #c2410c;
-  --accent-hover: #a8380a;
-  --accent-ink: #fff8f1;
-  --accent-soft: rgb(194 65 12 / 0.1);
+  --accent: #8c6510;
+  --accent-hover: #74530c;
+  --accent-ink: #fff8ea;
+  --accent-soft: rgb(140 101 16 / 0.11);
   --moss: #4f6536;
   --moss-soft: rgb(79 101 54 / 0.12);
-  --amber: #9a5b06;
-  --amber-soft: rgb(154 91 6 / 0.1);
-  --glass: rgb(251 249 245 / 0.78);
-  --shadow: 0 1px 1px rgb(38 26 18 / 0.05), 0 4px 4px -1px rgb(38 26 18 / 0.04), 0 16px 32px -12px rgb(38 26 18 / 0.12);
+  --amber: #a4481a;
+  --amber-soft: rgb(164 72 26 / 0.1);
+  --glass: rgb(248 245 238 / 0.8);
+  --shadow: 0 1px 1px rgb(28 30 20 / 0.05), 0 4px 4px -1px rgb(28 30 20 / 0.04), 0 16px 32px -12px rgb(28 30 20 / 0.13);
 }
 
 @media (prefers-color-scheme: light) {
   :root:not([data-theme]) {
     color-scheme: light;
-    --bg: #f5f2ec;
-    --surface-1: #fbf9f5;
-    --surface-2: #ffffff;
-    --surface-3: #ebe6dd;
-    --ink: 38 26 18;
+    --bg: #f2ede2;
+    --surface-1: #f8f5ee;
+    --surface-2: #fdfbf6;
+    --surface-3: #e7e0d1;
+    --ink: 28 30 20; /* night-olive ink */
     --text: rgb(var(--ink));
-    --text-muted: rgb(var(--ink) / 0.64);
-    --text-dim: rgb(var(--ink) / 0.44);
+    --text-muted: rgb(var(--ink) / 0.66);
+    --text-dim: rgb(var(--ink) / 0.46);
     --hairline: rgb(var(--ink) / 0.1);
     --hairline-strong: rgb(var(--ink) / 0.18);
     --highlight: rgb(255 255 255 / 0.7);
-    --accent: #c2410c;
-    --accent-hover: #a8380a;
-    --accent-ink: #fff8f1;
-    --accent-soft: rgb(194 65 12 / 0.1);
+    --accent: #8c6510;
+    --accent-hover: #74530c;
+    --accent-ink: #fff8ea;
+    --accent-soft: rgb(140 101 16 / 0.11);
     --moss: #4f6536;
     --moss-soft: rgb(79 101 54 / 0.12);
-    --amber: #9a5b06;
-    --amber-soft: rgb(154 91 6 / 0.1);
-    --glass: rgb(251 249 245 / 0.78);
-    --shadow: 0 1px 1px rgb(38 26 18 / 0.05), 0 4px 4px -1px rgb(38 26 18 / 0.04), 0 16px 32px -12px rgb(38 26 18 / 0.12);
+    --amber: #a4481a;
+    --amber-soft: rgb(164 72 26 / 0.1);
+    --glass: rgb(248 245 238 / 0.8);
+    --shadow: 0 1px 1px rgb(28 30 20 / 0.05), 0 4px 4px -1px rgb(28 30 20 / 0.04), 0 16px 32px -12px rgb(28 30 20 / 0.13);
   }
 }
 
