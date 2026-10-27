@@ -51,8 +51,10 @@ export async function POST(req: Request) {
     if (wait > 0) await sleep(wait);
 
     try {
-      const result = await createAccount(admin, email, password, { isOurs: opens(admin, email, password), attempts: 1 });
-      if (result === "exists") return ok({ error: "exists" }, { status: 409 });
+      const result = await createAccount(admin, email, password, { attempts: 1 });
+      // "Exists" with this very password is this student's own account — an earlier request of theirs that timed out on
+      // the way back still created it — so it is theirs to sign in to, not someone else's.
+      if (result === "exists") return (await opens(admin, email, password)()) ? ok({ created: true }, { status: 201 }) : ok({ error: "exists" }, { status: 409 });
       return ok({ created: true }, { status: 201 });
     } catch (e) {
       const err = e as { code?: string; status?: number; message?: string };
