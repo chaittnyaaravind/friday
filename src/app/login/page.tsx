@@ -122,7 +122,8 @@ function Login() {
         let res: Response | null = null;
         const until = Date.now() + 5 * 60_000;
         for (let attempt = 0; Date.now() < until; attempt++) {
-          if (attempt) await new Promise((r) => setTimeout(r, 1200 + Math.random() * 2400));
+          // Back off as the line grows (1.5s → 10s, jittered), so a long line costs the server less, not more.
+          if (attempt) await new Promise((r) => setTimeout(r, Math.min(10_000, 1500 * 1.5 ** (attempt - 1)) * (0.6 + Math.random() * 0.8)));
           res = await fetch("/api/auth/signup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: to, password, website: trap.current?.value || undefined }) }).catch(() => null);
           if (res && res.status !== 202 && (res.status < 500 || res.status === 503)) break;
           setQueued(true);
