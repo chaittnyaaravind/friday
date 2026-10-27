@@ -1,13 +1,23 @@
 import { ArrowUpRight } from "lucide-react";
 import { HeroStack } from "@/components/hero-stack";
+import { HuntCursor } from "@/components/hunt-cursor";
+import { BigWord, HuntTrail, Torch, type TrailStep } from "@/components/hunt-scroll";
 import { Reveal, ScrollFade, ScrollProgress, Stagger, WordReveal } from "@/components/motion";
 import { Card, Label, LinkButton } from "@/components/ui";
 import { REGISTRY } from "@/lib/discovery/registry";
 import { getUser } from "@/lib/supabase/server";
 
-const HUNT = ["Scout", "Track", "Verify", "Rank", "Tailor", "Alert", "You review", "You approve", "Apply", "Follow up", "Interview", "Offer"];
-const YOURS = new Set(["You review", "You approve"]);
-const SJSU_FEEDS = REGISTRY.filter((c) => c.isSjsu).length;
+const SJSU = REGISTRY.filter((c) => c.isSjsu);
+const SJSU_FEEDS = SJSU.length;
+const HUNT: TrailStep[] = [
+  { name: "Scout", body: `Every minute FRIDAY reads ${SJSU_FEEDS} official SJSU hiring pages, straight from each office. No reposts, no aggregators.` },
+  { name: "Verify", body: "Each opening is checked at its source. Closed, expired and dining jobs are dropped before you ever see them." },
+  { name: "Rank", body: "Scored against your hunt brief: the work you want, your hours, your pay floor, desk or active. Every point is explained." },
+  { name: "Tailor", body: "Your resume is rewritten toward the posting using only facts you already have. Nothing is invented." },
+  { name: "Alert", body: "The job, the score and the tailored resume land in your Telegram the moment FRIDAY finds it." },
+  { name: "You approve", body: "Nothing is sent anywhere until you say so. FRIDAY never signs in as you and never solves a CAPTCHA.", yours: true },
+  { name: "Strike", body: "You apply on the official page with the tailored resume in hand. FRIDAY tracks it and reminds you to follow up." },
+];
 
 export default async function Landing() {
   const user = await getUser();
@@ -62,19 +72,15 @@ export default async function Landing() {
         />
       </div>
 
+      <BigWord word="The hunt" />
+      <HuntTrail steps={HUNT} />
+
       <section className="relative z-10 mx-auto max-w-[1240px] px-5 pb-24 md:px-10">
-        <Reveal>
-        <div className="rule-dashed mb-10" />
-        <Label>The hunt</Label>
-        <ol className="mt-5 flex flex-wrap gap-x-2 gap-y-3 text-[15px] md:text-[18px]">
-          {HUNT.map((p, i) => (
-            <li key={p} className="flex items-center gap-2">
-              <span className={YOURS.has(p) ? "text-accent" : "text-text"}>{p}</span>
-              {i < HUNT.length - 1 && <span className="text-dim">→</span>}
-            </li>
-          ))}
-        </ol>
-        <p className="mt-4 max-w-[60ch] text-[13.5px] text-muted">The two steps in gold are always yours. FRIDAY never sends anything you haven’t approved, never signs in anywhere as you, and never solves a CAPTCHA.</p>
+        <Reveal className="mt-8 flex flex-col gap-6">
+          <h2 className="max-w-[20ch] text-[36px] leading-[1] md:text-[52px]">
+            {SJSU_FEEDS} places SJSU jobs <span className="serif-em">hide</span>.
+          </h2>
+          <Torch items={SJSU.map((c) => c.name.replace(/^SJSU /, ""))} caption="FRIDAY watches every one of them, every minute" />
         </Reveal>
 
         <Stagger className="mt-16 grid gap-3 md:grid-cols-3" gap={0.09}>
@@ -103,6 +109,7 @@ export default async function Landing() {
         <span>An independent student tool. Not affiliated with or endorsed by San José State University. No students were hunted, only jobs.</span>
         <span>Work-authorization notes are informational only — verify with SJSU ISSS.</span>
       </footer>
+      <HuntCursor />
     </div>
   );
 }

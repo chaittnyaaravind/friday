@@ -193,6 +193,9 @@
 }
 :root[data-theme="light"] .grain::after { opacity: 0.03; }
 
+/* The landing page's crosshair (hunt-cursor.tsx) replaces the pointer on mouse/trackpad devices only. */
+html.hunt-cursor, html.hunt-cursor * { cursor: none !important; }
+
 @keyframes rise {
   from { opacity: 0; transform: translateY(14px); filter: blur(6px); }
   to { opacity: 1; transform: none; filter: none; }
