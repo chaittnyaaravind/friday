@@ -14,7 +14,7 @@ vi.mock("@/lib/telegram/bot", () => ({
     return { messageId: 1 };
   },
 }));
-const { createAccount, sendTelegramLink, LINK_COOLDOWN_S } = await import("./accounts");
+const { createAccount, readTurn, sendTelegramLink, signTurn, LINK_COOLDOWN_S } = await import("./accounts");
 
 type Target = { user_id: string; telegram_chat_id: number; signin_link_sent_at: string | null };
 function fakeAdmin(o: { createError?: { code?: string; message: string }; target?: Target }) {
@@ -95,5 +95,20 @@ describe("createAccount under load", () => {
 
   it("gives up after a bounded number of tries", async () => {
     await expect(createAccount(flaky([timeout]), "a@sjsu.edu", "longpassword", noWait)).rejects.toMatchObject({ code: "request_timeout" });
+  });
+});
+
+describe("sign-up turns", () => {
+  const at = Date.parse("2026-10-27T04:00:00Z");
+  it("round-trip for the same email and key", () => {
+    expect(readTurn(signTurn("a@sjsu.edu", at, "k1"), "a@sjsu.edu", "k1")).toBe(at);
+  });
+  it("cannot be moved up the line, reused for another email, or forged", () => {
+    const t = signTurn("a@sjsu.edu", at, "k1");
+    expect(readTurn(t.replace(String(at), String(at - 60_000)), "a@sjsu.edu", "k1")).toBeNull();
+    expect(readTurn(t, "b@sjsu.edu", "k1")).toBeNull();
+    expect(readTurn(t, "a@sjsu.edu", "k2")).toBeNull();
+    expect(readTurn("garbage", "a@sjsu.edu", "k1")).toBeNull();
+    expect(readTurn(undefined, "a@sjsu.edu", "k1")).toBeNull();
   });
 });

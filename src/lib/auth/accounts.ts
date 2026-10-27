@@ -9,6 +9,7 @@
  *    Students without Telegram fall back to the email link in the browser.
  */
 import "server-only";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendMessage, telegramConfigured } from "@/lib/telegram/bot";
 
@@ -72,4 +73,21 @@ export async function sendTelegramLink(admin: SupabaseClient, o: { email: string
   });
   await admin.from("hunter_links").update({ signin_link_sent_at: new Date(now).toISOString() }).eq("user_id", target.user_id);
   return { channel: "telegram" };
+}
+
+/**
+ * A sign-up turn: the moment this email's account may be created (migration 0026), signed so a browser coming back for
+ * its turn cannot move itself up the line. Format "<epoch ms>.<hex hmac>".
+ */
+export function signTurn(email: string, at: number, key: string): string {
+  return `${at}.${createHmac("sha256", key).update(`signup-turn|${email}|${at}`).digest("hex")}`;
+}
+
+/** The turn's time if the token is genuine and for this email; otherwise null (the request just reserves a new turn). */
+export function readTurn(token: string | undefined, email: string, key: string): number | null {
+  const m = token ? /^(\d{13})\.([0-9a-f]{64})$/.exec(token) : null;
+  if (!m) return null;
+  const want = Buffer.from(signTurn(email, Number(m[1]), key).split(".")[1], "hex");
+  const got = Buffer.from(m[2], "hex");
+  return want.length === got.length && timingSafeEqual(want, got) ? Number(m[1]) : null;
 }

@@ -48,7 +48,8 @@ function Login() {
   const [wait, setWait] = useState(0);
   const submitting = useRef(false);
   const trap = useRef<HTMLInputElement>(null);
-  const [queued, setQueued] = useState(false);
+  /** Seconds until this sign-up's turn while it waits in line; 0 when not waiting. */
+  const [queued, setQueued] = useState(0);
 
   useEffect(() => {
     if (wait <= 0) return;
@@ -117,18 +118,27 @@ function Login() {
         router.refresh();
       } else if (mode === "signup") {
         // The account is created on FRIDAY's server, already confirmed: no verification email to wait for.
-        // 202 = in line behind other sign-ups (api/auth/signup admission control); a failed request is retried too.
-        // Asking again is safe: an account this request already created is recognised by its password.
+        // 202 = in line: the server reserved this sign-up a turn and says when to come back (api/auth/signup), so the
+        // browser waits exactly that long instead of polling. A failed request is retried with backoff. Asking again is
+        // safe: an account this request already created is recognised by its password.
         let res: Response | null = null;
-        const until = Date.now() + 5 * 60_000;
+        let turn: string | undefined;
+        let pause = 0;
+        const until = Date.now() + 6 * 60_000;
         for (let attempt = 0; Date.now() < until; attempt++) {
-          // Back off as the line grows (1.5s → 10s, jittered), so a long line costs the server less, not more.
-          if (attempt) await new Promise((r) => setTimeout(r, Math.min(10_000, 1500 * 1.5 ** (attempt - 1)) * (0.6 + Math.random() * 0.8)));
-          res = await fetch("/api/auth/signup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: to, password, website: trap.current?.value || undefined }) }).catch(() => null);
-          if (res && res.status !== 202 && (res.status < 500 || res.status === 503)) break;
-          setQueued(true);
+          if (pause) await new Promise((r) => setTimeout(r, pause));
+          res = await fetch("/api/auth/signup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: to, password, turn, website: trap.current?.value || undefined }) }).catch(() => null);
+          if (res?.status === 202) {
+            const q = (await res.json().catch(() => null)) as { turn?: string; waitMs?: number } | null;
+            turn = q?.turn;
+            pause = Math.max(0, q?.waitMs ?? 2000) + Math.random() * 300;
+            setQueued(Math.ceil(pause / 1000));
+            continue;
+          }
+          if (res && (res.status < 500 || res.status === 503)) break;
+          pause = Math.min(10_000, 1500 * 1.5 ** attempt) * (0.6 + Math.random() * 0.8);
         }
-        setQueued(false);
+        setQueued(0);
         if (res?.status === 202) throw new Error("FRIDAY is very busy right now. Your place wasn't lost: press Create account again.");
         if (!res) throw new Error("Couldn't reach FRIDAY. Check your connection and try again.");
         if (res.status === 409) {
@@ -279,7 +289,7 @@ function Login() {
                   {error && <p role="alert" className="text-[13px] leading-snug text-amber">{error}</p>}
                   <Button type="submit" variant="primary" size="lg" disabled={busy} className="mt-1 w-full">
                     {busy && <Loader2 size={16} className="animate-spin" />}
-                    {busy ? (mode === "signup" ? (queued ? "Lots of students joining. You\u2019re in line…" : "Creating your account…") : "One moment…") : mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Email me a link"}
+                    {busy ? (mode === "signup" ? (queued ? `In line with other students… about ${queued}s` : "Creating your account…") : "One moment…") : mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Email me a link"}
                   </Button>
                   {mode === "magic" ? (
                     <button type="button" onClick={() => switchTo("signin")} className="inline-flex items-center justify-center gap-1.5 text-[13px] text-muted hover:text-text"><ArrowLeft size={14} /> Back to password sign-in</button>
